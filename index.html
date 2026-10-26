@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crea Web — Chach App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- Top Bar -->
+    <header class="top">
+      <div class="brand">Crea<span>Web</span></div>
+      <div class="project">/ Mi sitio sin título</div>
+      <button class="btn iconbtn" id="undo" title="Deshacer (Ctrl+Z)">↶</button>
+      <button class="btn iconbtn" id="redo" title="Rehacer (Ctrl+Y)">↷</button>
+      <div class="top-spacer"></div>
+      <button class="btn" id="previewBtn">▷ Vista previa</button>
+      <button class="btn primary" id="exportBtn">Exportar HTML ↗</button>
+    </header>
+
+    <!-- Left Rail -->
+    <nav class="rail" aria-label="Navegación principal">
+      <button class="active" data-panel="elements" title="Elementos">▦</button>
+      <button data-panel="templates" title="Plantillas">▣</button>
+      <button data-panel="uploads" title="Subir archivos">↑</button>
+      <button data-panel="layers" title="Capas">☷</button>
+      <div style="flex:1"></div>
+      <button id="toggleLeft" title="Ocultar/mostrar panel">◧</button>
+      <button id="toggleRight" title="Propiedades">⚙</button>
+    </nav>
+
+    <!-- Left Sidebar Panels -->
+    <aside class="left" id="leftPanel">
+      <div class="panel-head">
+        <h3 id="leftTitle">Elementos</h3>
+        <button class="btn iconbtn" id="closeLeft" aria-label="Cerrar panel">×</button>
+      </div>
+
+      <!-- Elements Panel -->
+      <div id="elementsPanel">
+        <input class="search" id="toolSearch" placeholder="⌕  Buscar elemento…" aria-label="Buscar elemento">
+
+        <div class="section-title">Básicos</div>
+        <div class="tool-grid">
+          <button class="tool" data-add="text">
+            <span class="emoji">T</span>
+            <strong>Texto</strong>
+            <small>Título o párrafo</small>
+          </button>
+          <button class="tool" data-add="button">
+            <span class="emoji">▰</span>
+            <strong>Botón</strong>
+            <small>Con enlace</small>
+          </button>
+          <button class="tool" data-add="shape">
+            <span class="emoji">◧</span>
+            <strong>Figura</strong>
+            <small>Formas y geometría</small>
+          </button>
+          <button class="tool" data-add="image">
+            <span class="emoji">▧</span>
+            <strong>Imagen</strong>
+            <small>Archivo o URL</small>
+          </button>
+          <button class="tool" data-add="video">
+            <span class="emoji">▷</span>
+            <strong>Video</strong>
+            <small>Archivo o URL</small>
+          </button>
+          <button class="tool" data-add="audio">
+            <span class="emoji">♫</span>
+            <strong>Audio</strong>
+            <small>Archivo o URL</small>
+          </button>
+          <button class="tool" data-add="social">
+            <span class="emoji">◎</span>
+            <strong>Redes sociales</strong>
+            <small>Iconos y enlaces</small>
+          </button>
+          <button class="tool" data-add="spacer">
+            <span class="emoji">↔</span>
+            <strong>Espaciador</strong>
+            <small>Bloque libre</small>
+          </button>
+        </div>
+
+        <div class="section-title">Secciones prefabricadas</div>
+        <button class="preset" data-preset="hero">✦ Hero / portada moderna</button>
+        <button class="preset" data-preset="nav">☰ Menú de navegación</button>
+        <button class="preset" data-preset="card">▤ Tarjeta de contenido</button>
+        <button class="preset" data-preset="cta">➜ Llamada a la acción</button>
+
+        <div class="section-title">Fondo de página</div>
+        <div class="field">
+          <label for="pageColor">Color de fondo</label>
+          <input type="color" id="pageColor" value="#ffffff">
+        </div>
+        <div class="field">
+          <label for="pageBgUrl">Imagen de fondo (URL)</label>
+          <input id="pageBgUrl" placeholder="https://.../fondo.jpg">
+          <button class="btn" id="applyBg" style="width:100%;margin-top:7px">Aplicar fondo</button>
+        </div>
+      </div>
+
+      <!-- Templates Panel -->
+      <div id="templatesPanel" class="hidden">
+        <div class="section-title">Diseños rápidos</div>
+        <button class="preset" data-preset="hero">✦ Hero de bienvenida</button>
+        <button class="preset" data-preset="nav">☰ Navegación superior</button>
+        <button class="preset" data-preset="card">▤ Tarjeta de producto</button>
+        <button class="preset" data-preset="cta">➜ Banner de contacto</button>
+        <p class="small">Los bloques se agregan al lienzo y puedes moverlos, editarlos y cambiar sus colores.</p>
+      </div>
+
+      <!-- Uploads Panel -->
+      <div id="uploadsPanel" class="hidden">
+        <div class="section-title">Archivos multimedia</div>
+        <p class="small">Selecciona el tipo de archivo y se añadirá al lienzo. También puedes usar enlaces desde las propiedades.</p>
+        <div class="field">
+          <label for="imageFile">Imagen</label>
+          <input type="file" id="imageFile" accept="image/*">
+        </div>
+        <div class="field">
+          <label for="audioFile">Audio</label>
+          <input type="file" id="audioFile" accept="audio/*">
+        </div>
+        <div class="field">
+          <label for="videoFile">Video</label>
+          <input type="file" id="videoFile" accept="video/*">
+        </div>
+      </div>
+
+      <!-- Layers Panel -->
+      <div id="layersPanel" class="hidden">
+        <div class="section-title">Capas del documento</div>
+        <div id="layerList"></div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace / Canvas -->
+    <main class="work">
+      <div class="workbar">
+        <div>
+          <h2>Área de diseño</h2>
+          <div class="small" id="canvasHint">Lienzo web · arrastra elementos para posicionarlos</div>
+        </div>
+        <div class="view-switch" role="group" aria-label="Cambio de dispositivo">
+          <button class="active" data-view="desktop">▣ Ordenador</button>
+          <button data-view="tablet">▤ Tablet</button>
+          <button data-view="mobile">▯ Móvil</button>
+        </div>
+      </div>
+
+      <div class="canvas-wrap">
+        <div class="canvas" id="canvas" tabindex="0">
+          <div class="canvas-bg" id="canvasBg"></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right Properties Panel -->
+    <aside class="right" id="rightPanel">
+      <div class="panel-head">
+        <h3>Propiedades</h3>
+        <button class="btn iconbtn" id="closeRight" aria-label="Cerrar propiedades">×</button>
+      </div>
+      <div id="propsContent">
+        <!-- Rendered dynamically by PropertiesPanel -->
+      </div>
+    </aside>
+
+    <!-- Bottom Footer Controls -->
+    <footer class="bottom">
+      <span class="label">Insertar:</span>
+      <button data-add="text">T Texto</button>
+      <button data-add="image">▧ Imagen</button>
+      <button data-add="button">▰ Botón</button>
+      <button data-add="shape">◧ Figura</button>
+      <button data-add="social">◎ Social</button>
+      <button id="duplicateBtn">⧉ Duplicar</button>
+      <button id="deleteBtn">⌫ Borrar</button>
+      <span class="status" id="status">Listo · 0 elementos</span>
+    </footer>
+  </div>
+
+  <!-- Portals / Roots -->
+  <div id="modalRoot"></div>
+  <div id="toastRoot"></div>
+
+  <!-- Scripts (Separated and structured with SRP & SOLID) -->
+  <script src="js/utils/helpers.js"></script>
+  <script src="js/config/defaults.js"></script>
+  <script src="js/services/EventBus.js"></script>
+  <script src="js/services/NotificationService.js"></script>
+  <script src="js/services/HistoryService.js"></script>
+  <script src="js/services/StateManager.js"></script>
+  <script src="js/services/TemplateService.js"></script>
+  <script src="js/services/ExportService.js"></script>
+  <script src="js/ui/CanvasRenderer.js"></script>
+  <script src="js/ui/DragDropHandler.js"></script>
+  <script src="js/ui/PropertiesPanel.js"></script>
+  <script src="js/ui/LayersPanel.js"></script>
+  <script src="js/ui/NavigationRail.js"></script>
+  <script src="js/ui/KeyboardShortcuts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
