@@ -104,6 +104,7 @@ window.CanvasApp.CanvasRenderer = class CanvasRenderer {
     node.style.background = el.bg ?? 'transparent';
     node.style.borderRadius = `${el.radius ?? 0}px`;
     node.style.fontSize = `${el.fontSize ?? 14}px`;
+    node.style.fontFamily = el.fontFamily || 'DM Sans';
     node.style.opacity = el.opacity ?? 1;
   }
 
@@ -118,26 +119,23 @@ window.CanvasApp.CanvasRenderer = class CanvasRenderer {
     }
 
     const keys = Object.keys(changes);
-    // If structural properties changed, re-render the element
-    const structuralKeys = ['type', 'shape', 'src', 'fit', 'text', 'href', 'radius', 'networks'];
+    // If structural or visual-style properties changed, re-render the element
+    const structuralKeys = ['type', 'shape', 'src', 'fit', 'text', 'href', 'radius', 'networks', 'crop'];
+    const styleKeys = ['color', 'bg', 'radius', 'fontSize', 'fontFamily', 'opacity'];
     const hasStructuralChanges = keys.some(k => structuralKeys.includes(k));
+    const hasStyleChanges = keys.some(k => styleKeys.includes(k));
 
-    if (hasStructuralChanges) {
+    if (hasStructuralChanges || hasStyleChanges) {
       this.applyElementStyles(node, element);
       const renderer = this.typeRenderers[element.type] || this.renderFallback.bind(this);
       renderer(node, element);
     } else {
-      // Fast property updates
+      // Fast property updates (dragging / positioning)
       if ('x' in changes) node.style.left = `${element.x}px`;
       if ('y' in changes) node.style.top = `${element.y}px`;
       if ('w' in changes) node.style.width = `${element.w}px`;
       if ('h' in changes) node.style.height = `${element.h}px`;
       if ('z' in changes) node.style.zIndex = element.z;
-      if ('color' in changes) node.style.color = element.color;
-      if ('bg' in changes) node.style.background = element.bg;
-      if ('radius' in changes) node.style.borderRadius = `${element.radius}px`;
-      if ('fontSize' in changes) node.style.fontSize = `${element.fontSize}px`;
-      if ('opacity' in changes) node.style.opacity = element.opacity;
     }
   }
 
@@ -172,12 +170,12 @@ window.CanvasApp.CanvasRenderer = class CanvasRenderer {
 
   renderText(node, el) {
     const { escapeHtml } = window.CanvasApp.Helpers;
-    node.innerHTML = `<div class="txt" style="font-size:${el.fontSize}px;color:${el.color}">${escapeHtml(el.text)}</div>`;
+    node.innerHTML = `<div class="txt" style="font-size:${el.fontSize}px;font-family:${el.fontFamily || 'DM Sans'};color:${el.color}">${escapeHtml(el.text)}</div>`;
   }
 
   renderButton(node, el) {
     const { escapeHtml } = window.CanvasApp.Helpers;
-    node.innerHTML = `<a href="${escapeHtml(el.href || '#')}" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:${el.color};background:${el.bg};border-radius:${el.radius}px;text-decoration:none;font-weight:700;font-size:${el.fontSize}px;pointer-events:none">${escapeHtml(el.text)}</a>`;
+    node.innerHTML = `<a href="${escapeHtml(el.href || '#')}" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:${el.color};background:${el.bg};border-radius:${el.radius}px;text-decoration:none;font-weight:700;font-size:${el.fontSize}px;font-family:${el.fontFamily || 'DM Sans'};pointer-events:none">${escapeHtml(el.text)}</a>`;
   }
 
   renderShape(node, el) {
@@ -229,8 +227,26 @@ window.CanvasApp.CanvasRenderer = class CanvasRenderer {
 
   renderImage(node, el) {
     const { escapeHtml } = window.CanvasApp.Helpers;
+    const crop = el.crop || { enabled: false, x: 0, y: 0, w: null, h: null, ratio: 'libre' };
+
     if (el.src) {
-      node.innerHTML = `<img class="media" src="${escapeHtml(el.src)}" alt="Imagen" style="border-radius:${el.radius}px;object-fit:${el.fit || 'cover'}">`;
+      if (crop.enabled) {
+        const cropW = crop.w || el.w;
+        const cropH = crop.h || el.h;
+        // Aplicar relación de aspecto si está bloqueada y no hay w/h explícitos
+        const ratios = { '1:1': 1, '16:9': 16 / 9, '4:3': 4 / 3, '3:2': 3 / 2, '9:16': 9 / 16 };
+        if (crop.ratio !== 'libre' && ratios[crop.ratio] && !crop.w && !crop.h) {
+          // Si solo se da ancho, calcular alto; si solo alto, calcular ancho
+        }
+        node.innerHTML = `
+          <div class="crop-wrapper" style="position:relative;overflow:hidden;width:100%;height:100%;border-radius:${el.radius}px;box-sizing:border-box">
+            <img class="media" src="${escapeHtml(el.src)}" alt="Imagen"
+              style="position:absolute;left:-${crop.x}px;top:-${crop.y}px;width:${cropW}px;height:${cropH}px;object-fit:none;border-radius:0;">
+          </div>
+        `;
+      } else {
+        node.innerHTML = `<img class="media" src="${escapeHtml(el.src)}" alt="Imagen" style="width:100%;height:100%;object-fit:${el.fit || 'cover'};border-radius:${el.radius}px;">`;
+      }
     } else {
       node.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#777;background:#f0f0f5;border-radius:${el.radius}px"><b style="font-size:24px">▧</b><span style="font-size:12px">Añadir imagen</span></div>`;
     }

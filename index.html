@@ -20,7 +20,14 @@
       <button class="btn iconbtn" id="redo" title="Rehacer (Ctrl+Y)">↷</button>
       <div class="top-spacer"></div>
       <button class="btn" id="previewBtn">▷ Vista previa</button>
-      <button class="btn primary" id="exportBtn">Exportar HTML ↗</button>
+      <select id="exportFormat" class="field" style="padding:6px 10px;border-radius:6px;border:1px solid #e1e3ee;background:#fff;color:#202238;font-size:13px;margin-right:8px">
+        <option value="html">HTML</option>
+        <option value="png">PNG</option>
+        <option value="jpg">JPG</option>
+        <option value="pdf">PDF</option>
+        <option value="svg">SVG</option>
+      </select>
+      <button class="btn primary" id="exportBtn">Exportar ↗</button>
     </header>
 
     <!-- Left Rail -->
@@ -28,6 +35,7 @@
       <button class="active" data-panel="elements" title="Elementos">▦</button>
       <button data-panel="templates" title="Plantillas">▣</button>
       <button data-panel="uploads" title="Subir archivos">↑</button>
+      <button data-panel="imageAi" title="Generar imagen con IA">✦</button>
       <button data-panel="layers" title="Capas">☷</button>
       <div style="flex:1"></div>
       <button id="toggleLeft" title="Ocultar/mostrar panel">◧</button>
@@ -125,6 +133,13 @@
           <label for="imageFile">Imagen</label>
           <input type="file" id="imageFile" accept="image/*">
         </div>
+        <label class="switch-field" for="removeBgOnUpload">
+          <input type="checkbox" id="removeBgOnUpload">
+          <span>
+            <strong>Quitar el fondo automáticamente</strong>
+            <small>IA local (BEN2 · ~219 MB la primera vez). La imagen no se sube a ningún servidor.</small>
+          </span>
+        </label>
         <div class="field">
           <label for="audioFile">Audio</label>
           <input type="file" id="audioFile" accept="audio/*">
@@ -132,6 +147,21 @@
         <div class="field">
           <label for="videoFile">Video</label>
           <input type="file" id="videoFile" accept="video/*">
+        </div>
+      </div>
+
+      <!-- AI Image Generator Panel -->
+      <div id="imageAiPanel" class="hidden">
+        <div class="section-title">Imagen con IA</div>
+        <p class="small">Describe la imagen y se añadirá al lienzo como un elemento editable.</p>
+        <div class="field">
+          <label for="aiImagePrompt">Descripción</label>
+          <textarea id="aiImagePrompt" placeholder="Ej: Bonsái en un estudio de cerámica, luz natural, fotografía de producto"></textarea>
+        </div>
+        <button class="btn ai-btn" id="generateAiImage" type="button">✦ Generar imagen</button>
+        <div class="bg-inline-progress hidden" id="aiImageProgress" aria-live="polite">
+          <span id="aiImageProgressLabel">Preparando IA…</span>
+          <div><i id="aiImageProgressFill"></i></div>
         </div>
       </div>
 
@@ -153,6 +183,29 @@
           <button class="active" data-view="desktop">▣ Ordenador</button>
           <button data-view="tablet">▤ Tablet</button>
           <button data-view="mobile">▯ Móvil</button>
+        </div>
+        <div class="zoom-controls" role="group" aria-label="Zoom">
+          <button id="zoomOut" title="Zoom alejar (-)">−</button>
+          <span id="zoomLevel" style="font-size:12px;font-weight:600;color:#666;min-width:28px;text-align:center">100%</span>
+          <button id="zoomIn" title="Zoom acercar (+)">+</button>
+          <button id="zoomReset" title="Restablecer zoom (100%)" style="font-size:11px">100%</button>
+        </div>
+        <div class="crop-controls" role="group" aria-label="Recorte del canvas">
+          <label for="cropRatio" style="font-size:11px;color:#666">Formato:</label>
+          <select id="cropRatio" class="field" style="padding:2px 6px;border-radius:6px;border:1px solid #e1e3ee;background:#fff;font-size:12px;margin-right:8px">
+            <option value="libre">Libre</option>
+            <option value="1:1">1:1 (Cuadrado)</option>
+            <option value="16:9">16:9 (Paisaje)</option>
+            <option value="4:3">4:3</option>
+            <option value="3:2">3:2</option>
+            <option value="9:16">9:16 (Retrato)</option>
+          </select>
+          <label for="cropWidth" style="font-size:11px;color:#666">Ancho:</label>
+          <input id="cropWidth" type="number" class="field" style="width:60px;padding:4px 6px;border-radius:6px;border:1px solid #e1e3ee;background:#fff;font-size:12px" min="200" />
+          <span style="font-size:11px;color:#999;margin:0 4px">×</span>
+          <label for="cropHeight" style="font-size:11px;color:#666">Alto:</label>
+          <input id="cropHeight" type="number" class="field" style="width:60px;padding:4px 6px;border-radius:6px;border:1px solid #e1e3ee;background:#fff;font-size:12px" min="200" />
+          <button id="cropApply" class="btn" style="padding:4px 10px;font-size:12px">Aplicar recorte</button>
         </div>
       </div>
 
@@ -201,6 +254,11 @@
   <script src="js/services/StateManager.js"></script>
   <script src="js/services/TemplateService.js"></script>
   <script src="js/services/ExportService.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="js/services/BackgroundRemovalService.js"></script>
+  <script src="js/services/SpeechToTextService.js"></script>
+  <script src="js/services/ImageGenerationService.js"></script>
   <script src="js/ui/CanvasRenderer.js"></script>
   <script src="js/ui/DragDropHandler.js"></script>
   <script src="js/ui/PropertiesPanel.js"></script>

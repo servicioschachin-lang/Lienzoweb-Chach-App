@@ -13,16 +13,19 @@ window.CanvasApp.NavigationRail = class NavigationRail {
    * @param {NotificationService} options.notificationService
    * @param {HTMLElement} options.canvas
    */
-  constructor({ stateManager, templateService, notificationService, canvas }) {
+  constructor({ stateManager, templateService, notificationService, canvas, backgroundRemoval, imageGeneration }) {
     this.state = stateManager;
     this.templates = templateService;
     this.notifications = notificationService;
     this.canvas = canvas;
+    this.backgroundRemoval = backgroundRemoval;
+    this.imageGeneration = imageGeneration;
 
     this.panelTitles = {
       elements: 'Elementos',
       templates: 'Plantillas',
       uploads: 'Subir archivos',
+      imageAi: 'Imagen con IA',
       layers: 'Capas'
     };
 
@@ -35,6 +38,7 @@ window.CanvasApp.NavigationRail = class NavigationRail {
     this.bindToolSearch();
     this.bindBackgroundControls();
     this.bindUploadHandlers();
+    this.bindImageGeneration();
     this.bindAddElements();
     this.bindPresetButtons();
   }
@@ -50,7 +54,7 @@ window.CanvasApp.NavigationRail = class NavigationRail {
   }
 
   switchPanel(name) {
-    const panels = ['elements', 'templates', 'uploads', 'layers'];
+    const panels = ['elements', 'templates', 'uploads', 'imageAi', 'layers'];
     panels.forEach(p => {
       const el = document.getElementById(`${p}Panel`);
       if (el) el.classList.toggle('hidden', p !== name);
@@ -70,6 +74,50 @@ window.CanvasApp.NavigationRail = class NavigationRail {
     if (window.innerWidth <= 760 && leftPanel) {
       leftPanel.classList.add('open');
     }
+  }
+
+  bindImageGeneration() {
+    const button = document.getElementById('generateAiImage');
+    const promptInput = document.getElementById('aiImagePrompt');
+    const progress = document.getElementById('aiImageProgress');
+    const progressLabel = document.getElementById('aiImageProgressLabel');
+    const progressFill = document.getElementById('aiImageProgressFill');
+
+    if (!button || !promptInput || !this.imageGeneration) return;
+
+    button.addEventListener('click', async () => {
+      const prompt = promptInput.value.trim();
+      if (!prompt) {
+        this.notifications.showToast('Escribe una descripción para generar la imagen.');
+        promptInput.focus();
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = 'Generando…';
+      progress?.classList.remove('hidden');
+
+      try {
+        const image = await this.imageGeneration.generate(prompt, {
+          onProgress: ({ message, percent }) => {
+            if (progressLabel) progressLabel.textContent = message;
+            if (progressFill) progressFill.style.width = `${Math.max(0, Math.min(100, percent || 0))}%`;
+          }
+        });
+
+        const src = URL.createObjectURL(image);
+        this.state.addElement('image', { src });
+        this.notifications.showToast('Imagen generada y añadida al lienzo');
+      } catch (error) {
+        console.error('[ImageGeneration] No se pudo generar la imagen:', error);
+        this.notifications.showToast(error.userMessage || 'No se pudo generar la imagen.');
+      } finally {
+        button.disabled = false;
+        button.textContent = '✦ Generar imagen';
+        progress?.classList.add('hidden');
+        if (progressFill) progressFill.style.width = '0%';
+      }
+    });
   }
 
   bindPanelToggles() {
@@ -155,21 +203,71 @@ window.CanvasApp.NavigationRail = class NavigationRail {
   }
 
   bindUploadHandlers() {
+    const typeLabels = { image: 'imagen', audio: 'audio', video: 'video' };
+
     const handleFile = (input, type) => {
       if (!input) return;
-      input.addEventListener('change', e => {
+
+      input.addEventListener('change', async e => {
         const file = e.target.files[0];
         if (!file) return;
-        const blobUrl = URL.createObjectURL(file);
-        this.state.addElement(type, { src: blobUrl });
-        this.notifications.showToast(`Archivo de ${type} añadido al lienzo`);
+
         input.value = '';
+
+        const blobUrl = URL.createObjectURL(file);
+        const element = this.state.addElement(type, { src: blobUrl });
+
+        const shouldRemoveBg = type === 'image' &&
+          this.backgroundRemoval &&
+          document.getElementById('removeBgOnUpload')?.checked;
+
+        if (shouldRemoveBg) {
+          await this.removeElementBackground(element, file);
+          return;
+        }
+
+        this.notifications.showToast(`Archivo de ${typeLabels[type] || type} añadido al lienzo`);
       });
     };
 
     handleFile(document.getElementById('imageFile'), 'image');
     handleFile(document.getElementById('audioFile'), 'audio');
     handleFile(document.getElementById('videoFile'), 'video');
+  }
+
+  /**
+   * Run on-device background removal and replace the element image with the transparent PNG.
+   * @param {Object} element - Canvas element created for the uploaded file
+   * @param {Blob|File|string} source
+   */
+  async removeElementBackground(element, source) {
+    if (!this.backgroundRemoval) return;
+
+    this.notifications.showProgress('Preparando IA…', 0);
+
+    try {
+      const png = await this.backgroundRemoval.remove(source, {
+        onProgress: ({ message, percent }) => this.notifications.showProgress(message, percent)
+      });
+
+      const current = this.state.getElementById(element.id);
+      if (!current) return;
+
+      const pngUrl = URL.createObjectURL(png);
+      this.state.updateElement(element.id, {
+        src: pngUrl,
+        bg: 'transparent',
+        bgRemoved: true,
+        originalSrc: current.src,
+        originalBg: current.bg
+      }, true);
+
+      this.notifications.showToast('Fondo eliminado: imagen transparente añadida');
+    } catch (error) {
+      this.notifications.showToast(error.userMessage || 'No se pudo quitar el fondo.');
+    } finally {
+      this.notifications.hideProgress();
+    }
   }
 
   bindAddElements() {

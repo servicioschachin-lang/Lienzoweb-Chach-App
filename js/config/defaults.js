@@ -13,6 +13,7 @@ window.CanvasApp.Config = {
       h: 70,
       text: 'Haz clic para editar este texto',
       fontSize: 28,
+      fontFamily: 'DM Sans',
       color: '#24243a',
       bg: 'transparent',
       radius: 0,
@@ -25,6 +26,7 @@ window.CanvasApp.Config = {
       h: 44,
       text: 'Descubre más',
       fontSize: 14,
+      fontFamily: 'DM Sans',
       color: '#ffffff',
       bg: '#6d5dfc',
       radius: 10,
@@ -56,7 +58,16 @@ window.CanvasApp.Config = {
       radius: 12,
       src: '',
       fit: 'cover',
-      opacity: 1
+      opacity: 1,
+      // Recorte de imagen individual
+      crop: {
+        enabled: false,
+        x: 0,      // offset horizontal desde la izquierda de la imagen original
+        y: 0,      // offset vertical desde arriba de la imagen original
+        w: null,   // ancho del área de recorte (null = ancho del elemento)
+        h: null,   // alto del área de recorte (null = alto del elemento)
+        ratio: 'libre' // libre | 1:1 | 16:9 | 4:3 | 3:2 | 9:16
+      }
     },
     video: {
       x: 90,
@@ -91,6 +102,7 @@ window.CanvasApp.Config = {
       h: 60,
       text: '',
       fontSize: 28,
+      fontFamily: 'DM Sans',
       color: '#6d5dfc',
       bg: 'transparent',
       radius: 8,
@@ -105,11 +117,37 @@ window.CanvasApp.Config = {
       h: 28,
       text: 'Espaciador',
       fontSize: 12,
+      fontFamily: 'DM Sans',
       color: '#999999',
       bg: '#eeeeee',
       radius: 4,
       opacity: 1
     }
+  },
+
+  BACKGROUND_REMOVAL: {
+    // runonweb ships TypeScript sources; esm.sh transpiles them for the browser.
+    moduleUrl: 'https://esm.sh/runonweb@0.1.0/remove-bg',
+    // BEN2 runs on WASM only: its LayerNorm shader fails on the current WebGPU build.
+    device: 'wasm',
+    modelLabel: 'BEN2 (~219 MB)'
+  },
+
+  SPEECH_TO_TEXT: {
+    // runonweb ships TypeScript sources; esm.sh transpiles them for the browser.
+    moduleUrl: 'https://esm.sh/runonweb@0.1.0/stt',
+    // El modelo por defecto de runonweb es whisper-tiny.en (solo inglés).
+    // Usamos la variante multilingüe para poder dictar en español.
+    model: 'onnx-community/whisper-base',
+    language: 'es',
+    // WASM usa pesos q8 (~77 MB). WebGPU descarga fp32 (~480 MB) y es más frágil.
+    device: 'wasm',
+    modelLabel: 'Whisper Base multilingüe (~77 MB)'
+  },
+
+  IMAGE_GENERATION: {
+    moduleUrl: 'https://esm.sh/runonweb@0.1.0/image',
+    device: 'webgpu'
   },
 
   VIEW_MODES: {

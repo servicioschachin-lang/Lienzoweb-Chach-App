@@ -1,16 +1,35 @@
 /**
  * ExportService
- * Single Responsibility: Generate and trigger client-side download of standalone HTML.
+ * Single Responsibility: Generate and trigger client-side download of the canvas
+ * in multiple formats: HTML, PNG, JPG, PDF and SVG.
  */
 window.CanvasApp = window.CanvasApp || {};
 
 window.CanvasApp.ExportService = class ExportService {
   /**
+   * Export the canvas in the requested format.
+   * @param {string} format - 'html' | 'png' | 'jpg' | 'pdf' | 'svg'
+   * @param {HTMLElement} canvasElement - Canvas DOM node
+   * @param {string} fileName - Download filename
+   */
+  async export(format, canvasElement, fileName) {
+    if (!canvasElement) return;
+    switch (format) {
+      case 'png': return this.exportPng(canvasElement, fileName || 'mi-diseno.png');
+      case 'jpg': return this.exportJpg(canvasElement, fileName || 'mi-diseno.jpg');
+      case 'pdf': return this.exportPdf(canvasElement, fileName || 'mi-diseno.pdf');
+      case 'svg': return this.exportSvg(canvasElement, fileName || 'mi-diseno.svg');
+      case 'html':
+      default:    return this.exportHtml(canvasElement, fileName || 'mi-pagina-web.html');
+    }
+  }
+
+  /**
    * Export the canvas as a standalone HTML file
    * @param {HTMLElement} canvasElement - Canvas DOM node
    * @param {string} fileName - Download filename
    */
-  exportHtml(canvasElement, fileName = 'mi-pagina-web.html') {
+  async exportHtml(canvasElement, fileName = 'mi-pagina-web.html') {
     if (!canvasElement) return;
 
     // Clone the canvas node to strip editor artifacts
@@ -27,6 +46,9 @@ window.CanvasApp.ExportService = class ExportService {
         a.style.pointerEvents = 'auto';
       });
     });
+
+    // Local uploads (and AI-processed PNGs) use blob: URLs that die with the page.
+    await this.inlineBlobMedia(clone);
 
     const exportHtml = `<!doctype html>
 <html lang="es">
@@ -111,5 +133,181 @@ window.CanvasApp.ExportService = class ExportService {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
+  }
+
+  /**
+   * Replace blob: media sources with data URLs so the exported file is self-contained.
+   * @param {HTMLElement} root
+   */
+  async inlineBlobMedia(root) {
+    const nodes = Array.from(root.querySelectorAll(
+      'img[src^="blob:"], video[src^="blob:"], audio[src^="blob:"]'
+    ));
+
+    await Promise.all(nodes.map(async node => {
+      try {
+        const src = node.getAttribute('src');
+        const response = await fetch(src);
+        const blob = await response.blob();
+        node.setAttribute('src', await this.blobToDataUrl(blob));
+      } catch (error) {
+        console.warn('No se pudo incrustar un archivo local en el HTML exportado.', error);
+      }
+    }));
+  }
+
+  /**
+   * @param {Blob} blob
+   * @returns {Promise<string>}
+   */
+  blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error || new Error('No se pudo leer el archivo'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Descarga helpers                                                   *
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Descarga un Blob como archivo.
+   * @param {Blob} blob
+   * @param {string} fileName
+   */
+  downloadBlob(blob, fileName) {
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  }
+
+  /**
+   * Descarga un data URL como archivo.
+   * @param {string} dataUrl
+   * @param {string} fileName
+   */
+  downloadDataUrl(dataUrl, fileName) {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * PNG                                                                *
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Exporta el canvas como imagen PNG mediante html2canvas.
+   * @param {HTMLElement} canvasElement
+   * @param {string} fileName
+   */
+  async exportPng(canvasElement, fileName = 'mi-diseno.png') {
+    const canvas = await html2canvas(canvasElement, {
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true,
+      scale: 2
+    });
+    this.downloadDataUrl(canvas.toDataURL('image/png'), fileName);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * JPG / JPEG                                                         *
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Exporta el canvas como imagen JPG mediante html2canvas.
+   * @param {HTMLElement} canvasElement
+   * @param {string} fileName
+   */
+  async exportJpg(canvasElement, fileName = 'mi-diseno.jpg') {
+    const canvas = await html2canvas(canvasElement, {
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true,
+      scale: 2
+    });
+    this.downloadDataUrl(canvas.toDataURL('image/jpeg', 0.92), fileName);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * PDF                                                                *
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Exporta el canvas como PDF mediante jsPDF.
+   * @param {HTMLElement} canvasElement
+   * @param {string} fileName
+   */
+  async exportPdf(canvasElement, fileName = 'mi-diseno.pdf') {
+    const canvas = await html2canvas(canvasElement, {
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true,
+      scale: 2
+    });
+    const imgData = canvas.toDataURL('image/png');
+
+    const { jsPDF } = window.jspdf || window;
+    const pdf = new jsPDF({
+      orientation: 'p',
+      unit: 'px',
+      format: [canvas.width, canvas.height]
+    });
+    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+    pdf.save(fileName);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * SVG                                                                *
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Exporta el canvas como SVG en línea (sin librerías externas).
+   * Convierte los elementos posicionados absolutamente a nodos SVG.
+   * @param {HTMLElement} canvasElement
+   * @param {string} fileName
+   */
+  async exportSvg(canvasElement, fileName = 'mi-diseno.svg') {
+    const clone = canvasElement.cloneNode(true);
+    clone.querySelectorAll('.selected').forEach(node => node.classList.remove('selected'));
+    clone.querySelectorAll('.element').forEach(el => {
+      el.style.cursor = 'default';
+      el.style.outline = 'none';
+      el.style.touchAction = 'auto';
+      el.style.userSelect = 'auto';
+      el.querySelectorAll('a').forEach(a => { a.style.pointerEvents = 'auto'; });
+    });
+
+    await this.inlineBlobMedia(clone);
+
+    const rect = canvasElement.getBoundingClientRect();
+    const width = rect.width || 1120;
+    const height = rect.height || 700;
+
+    const svgParts = [
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+      `<foreignObject width="100%" height="100%">`,
+      `<div xmlns="http://www.w3.org/1999/xhtml" style="font-family: 'DM Sans', sans-serif; width:${width}px;height:${height}px;">`,
+      clone.outerHTML,
+      `</div>`,
+      `</foreignObject>`,
+      `</svg>`
+    ];
+
+    const svg = svgParts.join('');
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    this.downloadBlob(blob, fileName);
   }
 };

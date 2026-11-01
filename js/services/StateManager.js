@@ -24,6 +24,9 @@ window.CanvasApp.StateManager = class StateManager {
       url: ''
     };
     this.previewMode = false;
+    this.zoomLevel = 100;
+    this.canvasSize = { width: 1120, height: 690 };
+    this.aspectRatioLock = null; // null = libre, '1:1', '16:9', '4:3', '3:2', '9:16'
     this.viewStates = {
       desktop: null,
       tablet: null,
@@ -40,6 +43,8 @@ window.CanvasApp.StateManager = class StateManager {
       selectedId: this.selectedId,
       nextId: this.nextId,
       canvasBg: { ...this.canvasBg },
+      canvasSize: { ...this.canvasSize },
+      aspectRatioLock: this.aspectRatioLock,
       currentView: this.currentView,
       viewStates: JSON.parse(JSON.stringify(this.viewStates))
     };
@@ -295,6 +300,87 @@ window.CanvasApp.StateManager = class StateManager {
     return this.previewMode;
   }
 
+  /** Zoom level in percent (50-300) */
+  setZoom(percent) {
+    const clamped = Math.max(25, Math.min(300, Math.round(percent)));
+    if (this.zoomLevel === clamped) return;
+    this.zoomLevel = clamped;
+    this.eventBus.emit('zoom:changed', { zoom: this.zoomLevel });
+    this.eventBus.emit('state:updated');
+  }
+
+  getZoom() {
+    return this.zoomLevel;
+  }
+
+  /* --------------------------------------------------------------- *
+   * Canvas crop / resize                                            *
+   * --------------------------------------------------------------- */
+
+  ASPECT_RATIOS = {
+    libre: null,
+    '1:1': 1,
+    '16:9': 16 / 9,
+    '4:3': 4 / 3,
+    '3:2': 3 / 2,
+    '9:16': 9 / 16
+  };
+
+  /**
+   * Establece el tamaño del canvas en píxeles.
+   * @param {number} width
+   * @param {number} height
+   */
+  setCanvasSize(width, height) {
+    const w = Math.max(200, Math.round(width));
+    const h = Math.max(200, Math.round(height));
+    if (this.canvasSize.width === w && this.canvasSize.height === h) return;
+    this.canvasSize = { width: w, height: h };
+    this.eventBus.emit('canvas:sizeChanged', { ...this.canvasSize });
+    this.eventBus.emit('state:updated');
+  }
+
+  /**
+   * Bloquea o desbloquea la relación de aspecto del canvas.
+   * @param {string|null} ratio - 'libre', '1:1', '16:9', '4:3', '3:2', '9:16' o null
+   */
+  setAspectRatio(ratio) {
+    if (this.aspectRatioLock === ratio) return;
+    this.aspectRatioLock = ratio;
+    this.eventBus.emit('canvas:ratioChanged', { ratio: this.aspectRatioLock });
+    this.eventBus.emit('state:updated');
+  }
+
+  /**
+   * Calcula la altura correspondiente para un ancho dado según el ratio bloqueado.
+   * @param {number} width
+   * @returns {number}
+   */
+  computeHeightForWidth(width) {
+    const ratio = this.aspectRatioLock ? this.ASPECT_RATIOS[this.aspectRatioLock] : null;
+    if (!ratio) return Math.round(width * (this.canvasSize.height / this.canvasSize.width));
+    return Math.round(width / ratio);
+  }
+
+  /**
+   * Calcula el ancho correspondiente para una altura dada según el ratio bloqueado.
+   * @param {number} height
+   * @returns {number}
+   */
+  computeWidthForHeight(height) {
+    const ratio = this.aspectRatioLock ? this.ASPECT_RATIOS[this.aspectRatioLock] : null;
+    if (!ratio) return Math.round(height * (this.canvasSize.width / this.canvasSize.height));
+    return Math.round(height * ratio);
+  }
+
+  getCanvasSize() {
+    return { ...this.canvasSize };
+  }
+
+  getAspectRatio() {
+    return this.aspectRatioLock;
+  }
+
   /**
    * Undo action
    */
@@ -332,6 +418,14 @@ window.CanvasApp.StateManager = class StateManager {
 
     if (snapshot.currentView) {
       this.currentView = snapshot.currentView;
+    }
+
+    if (snapshot.canvasSize) {
+      this.canvasSize = { ...snapshot.canvasSize };
+    }
+
+    if (snapshot.aspectRatioLock !== undefined) {
+      this.aspectRatioLock = snapshot.aspectRatioLock;
     }
 
     if (snapshot.viewStates) {
