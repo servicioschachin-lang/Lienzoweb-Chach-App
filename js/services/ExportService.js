@@ -12,12 +12,20 @@ window.CanvasApp.ExportService = class ExportService {
    * @param {HTMLElement} canvasElement - Canvas DOM node
    * @param {string} fileName - Download filename
    */
-  async export(format, canvasElement, fileName) {
+  async export(format, canvasElement, fileName, pageFormat) {
     if (!canvasElement) return;
+
+    // Asegurar extensión correcta según el formato
+    const extByFormat = { html: 'html', png: 'png', jpg: 'jpg', pdf: 'pdf', svg: 'svg' };
+    const ext = extByFormat[format] || 'html';
+    if (fileName && !fileName.toLowerCase().endsWith('.' + ext)) {
+      fileName = fileName + '.' + ext;
+    }
+
     switch (format) {
       case 'png': return this.exportPng(canvasElement, fileName || 'mi-diseno.png');
       case 'jpg': return this.exportJpg(canvasElement, fileName || 'mi-diseno.jpg');
-      case 'pdf': return this.exportPdf(canvasElement, fileName || 'mi-diseno.pdf');
+      case 'pdf': return this.exportPdf(canvasElement, fileName || 'mi-diseno.pdf', pageFormat);
       case 'svg': return this.exportSvg(canvasElement, fileName || 'mi-diseno.svg');
       case 'html':
       default:    return this.exportHtml(canvasElement, fileName || 'mi-pagina-web.html');
@@ -250,7 +258,7 @@ window.CanvasApp.ExportService = class ExportService {
    * @param {HTMLElement} canvasElement
    * @param {string} fileName
    */
-  async exportPdf(canvasElement, fileName = 'mi-diseno.pdf') {
+  async exportPdf(canvasElement, fileName = 'mi-diseno.pdf', pageFormat = 'letter') {
     const canvas = await html2canvas(canvasElement, {
       backgroundColor: '#ffffff',
       logging: false,
@@ -260,12 +268,30 @@ window.CanvasApp.ExportService = class ExportService {
     const imgData = canvas.toDataURL('image/png');
 
     const { jsPDF } = window.jspdf || window;
+
+    // Formatos de página en milímetros
+    const pageSizes = {
+      letter: [215.9, 279.4],   // Carta 8.5 × 11 pulgadas
+      oficio: [215.9, 342.9]    // Oficio 8.5 × 13.5 pulgadas
+    };
+    const [pageWidth, pageHeight] = pageSizes[pageFormat] || pageSizes.letter;
+
     const pdf = new jsPDF({
       orientation: 'p',
-      unit: 'px',
-      format: [canvas.width, canvas.height]
+      unit: 'mm',
+      format: [pageWidth, pageHeight]
     });
-    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+
+    // Ajustar la imagen a la página manteniendo proporciones (centrada)
+    const imgW = canvas.width;
+    const imgH = canvas.height;
+    const scale = Math.min(pageWidth / imgW, pageHeight / imgH);
+    const drawW = imgW * scale;
+    const drawH = imgH * scale;
+    const offsetX = (pageWidth - drawW) / 2;
+    const offsetY = (pageHeight - drawH) / 2;
+
+    pdf.addImage(imgData, 'PNG', offsetX, offsetY, drawW, drawH);
     pdf.save(fileName);
   }
 

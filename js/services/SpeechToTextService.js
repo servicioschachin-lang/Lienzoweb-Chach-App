@@ -33,6 +33,45 @@ window.CanvasApp.SpeechToTextService = class SpeechToTextService {
     this.hasTotalProgress = false;
   }
 
+  /**
+   * Preload the speech-to-text model on demand (with consent).
+   * @param {(progress: { status: string, message: string, percent: number }) => void} [onProgress]
+   */
+  async load(onProgress) {
+    this.progressHandler = typeof onProgress === 'function' ? onProgress : null;
+    this.emitProgress('preparing', 'Preparando el reconocedor de voz…', 0);
+
+    try {
+      if (!this.module) {
+        this.emitProgress('engine', 'Cargando el motor de STT…', 0);
+        this.module = await import(/* webpackIgnore: true */ this.moduleUrl);
+      }
+
+      if (!this.stt) {
+        this.stt = new this.module.SpeechToText({
+          model: this.model,
+          device: this.device,
+          ...(this.language ? { language: this.language } : {}),
+          onProgress: info => {
+            const mapped = this.mapProgress(info);
+            if (mapped && this.progressHandler) {
+              this.progressHandler(mapped);
+            }
+          }
+        });
+
+        this.emitProgress('model', `Descargando ${this.modelLabel}…`, 0);
+        this.totalProgress = 0;
+        this.hasTotalProgress = false;
+        await this.stt.load();
+      }
+
+      this.emitProgress('done', 'Modelo listo', 100);
+    } finally {
+      this.progressHandler = null;
+    }
+  }
+
   static isSupported() {
     return typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function';
   }
@@ -66,34 +105,71 @@ window.CanvasApp.SpeechToTextService = class SpeechToTextService {
     this.progressHandler = typeof onProgress === 'function' ? onProgress : null;
     this.emitProgress('preparing', 'Preparando el reconocedor de voz…', 0);
 
+    // Timeout de 300 segundos (5 minutos) para descargar 77 MB del modelo
+    const timeout = 300000;
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('La descarga del modelo de voz tardó demasiado. Verifica tu conexión (el modelo pesa ~77 MB).')), timeout);
+    });
+
     try {
       if (!this.module) {
-        this.emitProgress('engine', 'Cargando el motor de STT…', 0);
-        this.module = await import(/* webpackIgnore: true */ this.moduleUrl);
+        this.emitProgress('engine', 'Cargando el motor de STT…', 5);
+        console.log('[SpeechToText] Importando módulo desde:', this.moduleUrl);
+        try {
+          this.module = await Promise.race([
+            import(/* webpackIgnore: true */ this.moduleUrl),
+            timeoutPromise
+          ]);
+          console.log('[SpeechToText] Módulo importado correctamente');
+        } catch (importError) {
+          console.error('[SpeechToText] Error importando módulo:', importError);
+          throw new Error(`No se pudo cargar el módulo de voz: ${importError.message}`);
+        }
       }
 
       if (!this.stt) {
-        this.stt = new this.module.SpeechToText({
-          model: this.model,
-          device: this.device,
-          // Omitir language permite la autodetección; con 'es' forzamos español.
-          ...(this.language ? { language: this.language } : {}),
-          onProgress: info => {
-            const mapped = this.mapProgress(info);
-            if (mapped && this.progressHandler) {
-              this.progressHandler(mapped);
+        console.log('[SpeechToText] Creando instancia SpeechToText');
+        try {
+          this.stt = new this.module.SpeechToText({
+            model: this.model,
+            device: this.device,
+            // Omitir language permite la autodetección; con 'es' forzamos español.
+            ...(this.language ? { language: this.language } : {}),
+            onProgress: info => {
+              const mapped = this.mapProgress(info);
+              if (mapped && this.progressHandler) {
+                this.progressHandler(mapped);
+              }
             }
-          }
-        });
+          });
+        } catch (initError) {
+          console.error('[SpeechToText] Error creando instancia:', initError);
+          throw new Error(`No se pudo inicializar el modelo de voz: ${initError.message}`);
+        }
 
-        this.emitProgress('model', `Descargando ${this.modelLabel}…`, 0);
+        this.emitProgress('model', `Descargando ${this.modelLabel} (~77 MB)…`, 10);
         this.totalProgress = 0;
         this.hasTotalProgress = false;
-        await this.stt.load();
+        console.log('[SpeechToText] Cargando modelo...');
+        try {
+          await Promise.race([
+            this.stt.load(),
+            timeoutPromise
+          ]);
+          console.log('[SpeechToText] Modelo cargado correctamente');
+        } catch (loadError) {
+          console.error('[SpeechToText] Error cargando modelo:', loadError);
+          throw new Error(`No se pudo descargar el modelo de voz: ${loadError.message}`);
+        }
       }
 
       this.emitProgress('processing', 'Transcribiendo audio…', 95);
-      const result = await this.stt.transcribe(audio);
+      console.log('[SpeechToText] Transcribiendo audio...');
+      const result = await Promise.race([
+        this.stt.transcribe(audio),
+        timeoutPromise
+      ]);
+      console.log('[SpeechToText] Transcripción completada');
       this.emitProgress('done', 'Transcripción completada', 100);
       return result;
     } catch (error) {

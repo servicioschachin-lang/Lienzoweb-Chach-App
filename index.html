@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -20,26 +20,37 @@
       <button class="btn iconbtn" id="redo" title="Rehacer (Ctrl+Y)">↷</button>
       <div class="top-spacer"></div>
       <button class="btn" id="previewBtn">▷ Vista previa</button>
-      <select id="exportFormat" class="field" style="padding:6px 10px;border-radius:6px;border:1px solid #e1e3ee;background:#fff;color:#202238;font-size:13px;margin-right:8px">
+      <button class="btn" id="saveBtn" title="Guardar proyecto ahora">Guardar</button>
+      <label class="save-toggle" title="Guardar los cambios automáticamente">
+        <input type="checkbox" id="autoSaveToggle" checked>
+        <span>Guardado automático</span>
+      </label>
+      <select id="exportFormat" class="field">
         <option value="html">HTML</option>
         <option value="png">PNG</option>
         <option value="jpg">JPG</option>
         <option value="pdf">PDF</option>
         <option value="svg">SVG</option>
       </select>
+      <input type="text" id="exportFileName" placeholder="Nombre del archivo" value="mi-diseno" class="field">
+      <select id="exportPageFormat" class="field">
+        <option value="letter">Letter (Carta)</option>
+        <option value="oficio">Oficio</option>
+      </select>
       <button class="btn primary" id="exportBtn">Exportar ↗</button>
     </header>
 
     <!-- Left Rail -->
     <nav class="rail" aria-label="Navegación principal">
-      <button class="active" data-panel="elements" title="Elementos">▦</button>
-      <button data-panel="templates" title="Plantillas">▣</button>
-      <button data-panel="uploads" title="Subir archivos">↑</button>
-      <button data-panel="imageAi" title="Generar imagen con IA">✦</button>
-      <button data-panel="layers" title="Capas">☷</button>
-      <div style="flex:1"></div>
-      <button id="toggleLeft" title="Ocultar/mostrar panel">◧</button>
-      <button id="toggleRight" title="Propiedades">⚙</button>
+      <button class="active" data-panel="elements" title="Elementos"><i class="fas fa-layer-group" aria-hidden="true"></i></button>
+      <button data-panel="templates" title="Plantillas"><i class="fas fa-clone" aria-hidden="true"></i></button>
+      <button data-panel="uploads" title="Subir archivos"><i class="fas fa-upload" aria-hidden="true"></i></button>
+      <button data-panel="imageAi" title="Generar imagen con IA"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i></button>
+      <button data-panel="packages" title="Paquetes IA"><i class="fas fa-box" aria-hidden="true"></i></button>
+      <button data-panel="layers" title="Capas"><i class="fas fa-object-group" aria-hidden="true"></i></button>
+      <div class="flex-spacer"></div>
+      <button id="toggleLeft" title="Ocultar/mostrar panel"><i class="fas fa-compress" aria-hidden="true"></i></button>
+      <button id="toggleRight" title="Propiedades"><i class="fas fa-cog" aria-hidden="true"></i></button>
     </nav>
 
     <!-- Left Sidebar Panels -->
@@ -51,7 +62,7 @@
 
       <!-- Elements Panel -->
       <div id="elementsPanel">
-        <input class="search" id="toolSearch" placeholder="⌕  Buscar elemento…" aria-label="Buscar elemento">
+        <input class="search" id="toolSearch" placeholder="🔍  Buscar elemento…" aria-label="Buscar elemento">
 
         <div class="section-title">Básicos</div>
         <div class="tool-grid">
@@ -91,7 +102,7 @@
             <small>Iconos y enlaces</small>
           </button>
           <button class="tool" data-add="spacer">
-            <span class="emoji">↔</span>
+            <span class="emoji">…</span>
             <strong>Espaciador</strong>
             <small>Bloque libre</small>
           </button>
@@ -101,7 +112,7 @@
         <button class="preset" data-preset="hero">✦ Hero / portada moderna</button>
         <button class="preset" data-preset="nav">☰ Menú de navegación</button>
         <button class="preset" data-preset="card">▤ Tarjeta de contenido</button>
-        <button class="preset" data-preset="cta">➜ Llamada a la acción</button>
+        <button class="preset" data-preset="cta">✎ Llamada a la acción</button>
 
         <div class="section-title">Fondo de página</div>
         <div class="field">
@@ -111,7 +122,13 @@
         <div class="field">
           <label for="pageBgUrl">Imagen de fondo (URL)</label>
           <input id="pageBgUrl" placeholder="https://.../fondo.jpg">
-          <button class="btn" id="applyBg" style="width:100%;margin-top:7px">Aplicar fondo</button>
+          <button class="btn" id="applyBg">Aplicar fondo</button>
+        </div>
+        <div class="field">
+          <label for="pageBgVideo">Video de fondo (URL)</label>
+          <input id="pageBgVideo" placeholder="https://.../fondo.mp4">
+          <button class="btn" id="applyBgVideo">Aplicar video de fondo</button>
+          <button class="btn" id="clearBgVideo" style="background:#ef4444;color:#fff">Quitar video</button>
         </div>
       </div>
 
@@ -121,7 +138,7 @@
         <button class="preset" data-preset="hero">✦ Hero de bienvenida</button>
         <button class="preset" data-preset="nav">☰ Navegación superior</button>
         <button class="preset" data-preset="card">▤ Tarjeta de producto</button>
-        <button class="preset" data-preset="cta">➜ Banner de contacto</button>
+        <button class="preset" data-preset="cta">✎ Banner de contacto</button>
         <p class="small">Los bloques se agregan al lienzo y puedes moverlos, editarlos y cambiar sus colores.</p>
       </div>
 
@@ -148,6 +165,14 @@
           <label for="videoFile">Video</label>
           <input type="file" id="videoFile" accept="video/*">
         </div>
+        <section class="media-library-section" aria-labelledby="mediaLibraryTitle">
+          <div class="media-library-heading">
+            <div class="section-title" id="mediaLibraryTitle">Mi biblioteca</div>
+            <small>Archivos guardados para volver a usarlos</small>
+          </div>
+          <div id="mediaLibrary" class="media-library-grid"></div>
+          <p id="mediaLibraryEmpty" class="small media-library-empty">Todavía no hay archivos guardados.</p>
+        </section>
       </div>
 
       <!-- AI Image Generator Panel -->
@@ -159,13 +184,39 @@
           <textarea id="aiImagePrompt" placeholder="Ej: Bonsái en un estudio de cerámica, luz natural, fotografía de producto"></textarea>
         </div>
         <button class="btn ai-btn" id="generateAiImage" type="button">✦ Generar imagen</button>
+        <button class="btn ai-btn" id="prepareAiImage" type="button">Preparar IA antes</button>
         <div class="bg-inline-progress hidden" id="aiImageProgress" aria-live="polite">
           <span id="aiImageProgressLabel">Preparando IA…</span>
           <div><i id="aiImageProgressFill"></i></div>
         </div>
       </div>
 
-      <!-- Layers Panel -->
+      <!-- AI Packages Panel -->
+      <div id="packagesPanel" class="hidden">
+        <div class="section-title">Paquetes de IA (consentimiento)</div>
+        <p class="small">Estos modelos se descargan solo si los instalas. Elige cuáles quieres usar.</p>
+
+        <div class="package-card">
+          <strong>Quitar fondo (BEN2)</strong>
+          <small>Peso aprox. 219 MB · IA local</small>
+          <button class="btn" id="installBgPkg" type="button">Instalar</button>
+          <div class="bg-inline-progress hidden" id="bgPkgProgress"><span></span><div><i></i></div></div>
+        </div>
+
+        <div class="package-card">
+          <strong>Dictado por voz (Whisper base)</strong>
+          <small>Peso aprox. 150 MB · IA local</small>
+          <button class="btn" id="installSttPkg" type="button">Instalar</button>
+          <div class="bg-inline-progress hidden" id="sttPkgProgress"><span></span><div><i></i></div></div>
+        </div>
+
+        <div class="package-card">
+          <strong>Generador de imágenes</strong>
+          <small>Peso aprox. 3.5 GB · IA local</small>
+          <button class="btn" id="installImgPkg" type="button">Instalar</button>
+          <div class="bg-inline-progress hidden" id="imgPkgProgress"><span></span><div><i></i></div></div>
+        </div>
+      </div>
       <div id="layersPanel" class="hidden">
         <div class="section-title">Capas del documento</div>
         <div id="layerList"></div>
@@ -180,32 +231,15 @@
           <div class="small" id="canvasHint">Lienzo web · arrastra elementos para posicionarlos</div>
         </div>
         <div class="view-switch" role="group" aria-label="Cambio de dispositivo">
-          <button class="active" data-view="desktop">▣ Ordenador</button>
+          <button class="active" data-view="desktop">□ Ordenador</button>
           <button data-view="tablet">▤ Tablet</button>
           <button data-view="mobile">▯ Móvil</button>
         </div>
         <div class="zoom-controls" role="group" aria-label="Zoom">
           <button id="zoomOut" title="Zoom alejar (-)">−</button>
-          <span id="zoomLevel" style="font-size:12px;font-weight:600;color:#666;min-width:28px;text-align:center">100%</span>
+          <span id="zoomLevel">100%</span>
           <button id="zoomIn" title="Zoom acercar (+)">+</button>
-          <button id="zoomReset" title="Restablecer zoom (100%)" style="font-size:11px">100%</button>
-        </div>
-        <div class="crop-controls" role="group" aria-label="Recorte del canvas">
-          <label for="cropRatio" style="font-size:11px;color:#666">Formato:</label>
-          <select id="cropRatio" class="field" style="padding:2px 6px;border-radius:6px;border:1px solid #e1e3ee;background:#fff;font-size:12px;margin-right:8px">
-            <option value="libre">Libre</option>
-            <option value="1:1">1:1 (Cuadrado)</option>
-            <option value="16:9">16:9 (Paisaje)</option>
-            <option value="4:3">4:3</option>
-            <option value="3:2">3:2</option>
-            <option value="9:16">9:16 (Retrato)</option>
-          </select>
-          <label for="cropWidth" style="font-size:11px;color:#666">Ancho:</label>
-          <input id="cropWidth" type="number" class="field" style="width:60px;padding:4px 6px;border-radius:6px;border:1px solid #e1e3ee;background:#fff;font-size:12px" min="200" />
-          <span style="font-size:11px;color:#999;margin:0 4px">×</span>
-          <label for="cropHeight" style="font-size:11px;color:#666">Alto:</label>
-          <input id="cropHeight" type="number" class="field" style="width:60px;padding:4px 6px;border-radius:6px;border:1px solid #e1e3ee;background:#fff;font-size:12px" min="200" />
-          <button id="cropApply" class="btn" style="padding:4px 10px;font-size:12px">Aplicar recorte</button>
+          <button id="zoomReset" title="Restablecer zoom (100%)">100%</button>
         </div>
       </div>
 
@@ -259,12 +293,22 @@
   <script src="js/services/BackgroundRemovalService.js"></script>
   <script src="js/services/SpeechToTextService.js"></script>
   <script src="js/services/ImageGenerationService.js"></script>
+  <script src="js/services/PersistenceService.js"></script>
+  <script src="js/services/MediaLibraryService.js"></script>
   <script src="js/ui/CanvasRenderer.js"></script>
   <script src="js/ui/DragDropHandler.js"></script>
   <script src="js/ui/PropertiesPanel.js"></script>
   <script src="js/ui/LayersPanel.js"></script>
   <script src="js/ui/NavigationRail.js"></script>
   <script src="js/ui/KeyboardShortcuts.js"></script>
+
+  <!-- Módulos de responsabilidad única de la app -->
+  <script src="js/app/PersistenceController.js"></script>
+  <script src="js/app/ViewController.js"></script>
+  <script src="js/app/HeaderActions.js"></script>
+  <script src="js/app/BottomActions.js"></script>
+  <script src="js/app/SeedData.js"></script>
+
   <script src="js/app.js"></script>
 </body>
 </html>

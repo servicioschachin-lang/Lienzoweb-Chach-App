@@ -17,7 +17,19 @@ window.CanvasApp.Config = {
       color: '#24243a',
       bg: 'transparent',
       radius: 0,
-      opacity: 1
+      opacity: 1,
+      // Orientación y efectos de texto
+      rotate: 0,                 // grados de rotación del bloque de texto
+      writingMode: 'horizontal-tb', // horizontal-tb | vertical-rl | vertical-lr
+      textOrientation: 'mixed',  // mixed | upright
+      letterSpacing: 0,          // px entre letras
+      wordSpacing: 0,            // px entre palabras
+      lineHeight: 1.2,           // multiplicador de interlineado
+      // Texto en curva (círculo / media luna)
+      textPath: 'none',          // none | arc | half-moon
+      textPathRadius: 0.45,      // radio del arco: <=1 = fracción del menor lado del elemento, >1 = px absoluto
+      textPathStart: 0,          // ángulo inicial en grados
+      textPathDirection: 'cw'    // cw | ccw
     },
     button: {
       x: 80,
@@ -80,7 +92,12 @@ window.CanvasApp.Config = {
       bg: '#eeeeee',
       radius: 8,
       src: '',
-      opacity: 1
+      opacity: 1,
+      autoplay: false,
+      loop: false,
+      muted: true,
+      controls: true,
+      playsinline: true
     },
     audio: {
       x: 90,
@@ -127,7 +144,7 @@ window.CanvasApp.Config = {
 
   BACKGROUND_REMOVAL: {
     // runonweb ships TypeScript sources; esm.sh transpiles them for the browser.
-    moduleUrl: 'https://esm.sh/runonweb@0.1.0/remove-bg',
+    moduleUrl: 'https://esm.sh/runonweb/remove-bg',
     // BEN2 runs on WASM only: its LayerNorm shader fails on the current WebGPU build.
     device: 'wasm',
     modelLabel: 'BEN2 (~219 MB)'
@@ -147,13 +164,18 @@ window.CanvasApp.Config = {
 
   IMAGE_GENERATION: {
     moduleUrl: 'https://esm.sh/runonweb@0.1.0/image',
-    device: 'webgpu'
+    device: 'wasm', // Forzar WASM para evitar WebGPU que puede ser más pesado
+    size: 'small',
+    width: 384,
+    height: 384,
+    steps: 2, // Reducir pasos para mejor rendimiento
+    modelLabel: 'Generador de imágenes (~3.5 GB)'
   },
 
   VIEW_MODES: {
     desktop: { label: 'Ordenador', width: null },
     tablet: { label: 'Tablet', width: 768 },
-    mobile: { label: 'Móvil', width: 375 }
+    mobile: { label: 'Móvil', width: 360 }
   },
 
   HISTORY_LIMIT: 60

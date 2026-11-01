@@ -228,34 +228,79 @@ window.CanvasApp.StateManager = class StateManager {
     this.viewStates[this.currentView] = {
       elements: JSON.parse(JSON.stringify(this.elements)),
       selectedId: this.selectedId,
-      nextId: this.nextId
+      nextId: this.nextId,
+      canvasSize: { ...this.canvasSize },
+      aspectRatioLock: this.aspectRatioLock
     };
 
     // Switch to new view
     this.currentView = viewMode;
 
+    const defaultSizes = {
+      desktop: { width: 1120, height: 690 },
+      tablet: { width: 768, height: 1024 },
+      mobile: { width: 360, height: 640 } // Exactamente 9:16 (360/640 = 9/16)
+    };
+
+    const defaultRatios = {
+      desktop: null,
+      tablet: null,
+      mobile: '9:16' // Forzar 9:16 en móvil
+    };
+
     // Restore the new view's state if it exists
-    if (this.viewStates[viewMode]) {
+    if (this.viewStates[viewMode] && this.viewStates[viewMode].elements) {
       this.elements = this.viewStates[viewMode].elements;
       this.selectedId = this.viewStates[viewMode].selectedId;
       this.nextId = this.viewStates[viewMode].nextId;
+      this.canvasSize = this.viewStates[viewMode].canvasSize
+        ? { ...this.viewStates[viewMode].canvasSize }
+        : { ...defaultSizes[viewMode] };
+      this.aspectRatioLock = this.viewStates[viewMode].aspectRatioLock !== undefined
+        ? this.viewStates[viewMode].aspectRatioLock
+        : defaultRatios[viewMode];
     } else {
-      // First time switching to this view, copy from desktop with scaled positions
+      // First time switching to this view, reposition from desktop without deforming.
+      // Positions are kept relative (percentage of canvas) so the design looks the same
+      // on desktop/tablet/mobile; only the layout/distribution changes.
       if (viewMode !== 'desktop' && this.viewStates.desktop) {
-        const scaleFactor = viewMode === 'tablet' ? 0.685 : 0.335;
+        const prevW = this.viewStates.desktop.canvasSize?.width ?? defaultSizes.desktop.width;
+        const prevH = this.viewStates.desktop.canvasSize?.height ?? defaultSizes.desktop.height;
+        const newW = defaultSizes[viewMode].width;
+        const newH = defaultSizes[viewMode].height;
+
         this.elements = JSON.parse(JSON.stringify(this.viewStates.desktop.elements));
         this.elements.forEach(el => {
-          el.x = Math.round(el.x * scaleFactor);
-          el.y = Math.round(el.y * scaleFactor);
-          el.w = Math.round(el.w * scaleFactor);
-          el.h = Math.round(el.h * scaleFactor);
+          // Posiciones relativas: un elemento al 50% del ancho sigue al 50% en cualquier vista
+          el.x = Math.round((el.x / prevW) * newW);
+          el.y = Math.round((el.y / prevH) * newH);
+
+          // Mantener tamaño original; si no cabe, reducir proporcionalmente preservando aspect ratio
+          if (el.w > newW) {
+            const scale = newW / el.w;
+            el.w = newW;
+            el.h = Math.max(1, Math.round(el.h * scale));
+          }
+          if (el.h > newH) {
+            const scale = newH / el.h;
+            el.h = newH;
+            el.w = Math.max(1, Math.round(el.w * scale));
+          }
+
+          // Clamp para que no se salga del canvas
+          el.x = Math.max(0, Math.min(el.x, newW - el.w));
+          el.y = Math.max(0, Math.min(el.y, newH - el.h));
         });
         this.selectedId = null;
         this.nextId = this.viewStates.desktop.nextId;
       }
+      this.canvasSize = { ...defaultSizes[viewMode] };
+      this.aspectRatioLock = defaultRatios[viewMode];
     }
 
     this.eventBus.emit('view:changed', { view: viewMode });
+    this.eventBus.emit('canvas:sizeChanged', { ...this.canvasSize });
+    this.eventBus.emit('canvas:ratioChanged', { ratio: this.aspectRatioLock });
     this.eventBus.emit('elements:changed', { elements: this.elements });
     this.eventBus.emit('selection:changed', {
       selectedId: this.selectedId,
@@ -278,6 +323,27 @@ window.CanvasApp.StateManager = class StateManager {
 
   setBgUrl(url) {
     this.canvasBg.url = url;
+    this.eventBus.emit('canvas:bgChanged', this.canvasBg);
+  }
+
+  /**
+   * Establece un video como fondo del canvas (capa detrás de los elementos).
+   * @param {string} src URL del video
+   * @param {Object} opts { autoplay, loop, muted }
+   */
+  setBgVideo(src, opts = {}) {
+    this.canvasBg.video = {
+      src: src || '',
+      autoplay: opts.autoplay !== false,
+      loop: opts.loop !== false,
+      muted: opts.muted !== false
+    };
+    this.eventBus.emit('canvas:bgChanged', this.canvasBg);
+  }
+
+  /** Quita el video de fondo y restaura solo color/imagen */
+  clearBgVideo() {
+    this.canvasBg.video = null;
     this.eventBus.emit('canvas:bgChanged', this.canvasBg);
   }
 

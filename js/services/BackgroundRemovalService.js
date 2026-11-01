@@ -6,7 +6,21 @@
 window.CanvasApp = window.CanvasApp || {};
 
 window.CanvasApp.BackgroundRemovalService = class BackgroundRemovalService {
-  /** Tamaño máximo (px) del lado más largo antes de enviarse al modelo IA. */
+  /**
+   * Preload the background-removal model on demand (with consent).
+   * @param {(progress: { status: string, message: string, percent: number }) => void} [onProgress]
+   */
+  async load(onProgress) {
+    this.progressHandler = typeof onProgress === 'function' ? onProgress : null;
+    this.emitProgress('preparing', 'Preparando el modelo de IA...', 0);
+    try {
+      await this.sendWorkerRequest('load');
+      this.modelLoaded = true;
+      this.emitProgress('done', 'Modelo listo', 100);
+    } finally {
+      this.progressHandler = null;
+    }
+  }
   static MAX_DIMENSION = 1024;
 
   /**
@@ -20,18 +34,27 @@ window.CanvasApp.BackgroundRemovalService = class BackgroundRemovalService {
     this.moduleUrl = moduleUrl || config.moduleUrl;
     this.device = device || config.device;
 
-    this.module = null;
-    this.remover = null;
+    this.worker = null;
+    this.workerRequests = new Map();
+    this.nextWorkerRequestId = 1;
+    this.modelLoaded = false;
     this.progressHandler = null;
     this.queue = Promise.resolve();
+    this.lastProgressKey = null;
+    this.lastProgressAt = 0;
+    this.pendingProgress = null;
+    this.progressFrame = null;
   }
 
   static isSupported() {
-    return typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function';
+    if (typeof WebAssembly !== 'object' || typeof WebAssembly.instantiate !== 'function') {
+      return false;
+    }
+    return true;
   }
 
   get isModelLoaded() {
-    return Boolean(this.remover);
+    return this.modelLoaded;
   }
 
   /**
@@ -57,39 +80,80 @@ window.CanvasApp.BackgroundRemovalService = class BackgroundRemovalService {
 
   async runRemoval(image, onProgress) {
     this.progressHandler = typeof onProgress === 'function' ? onProgress : null;
-    this.emitProgress('preparing', 'Preparando el modelo de IA…', 0);
+    this.emitProgress('preparing', 'Preparando la imagen...', 0);
 
     try {
-      if (!this.module) {
-        this.emitProgress('engine', 'Cargando el motor de IA…', 0);
-        this.module = await import(/* webpackIgnore: true */ this.moduleUrl);
-      }
-
-      if (!this.remover) {
-        this.remover = new this.module.RemoveBackground({
-          device: this.device,
-          onProgress: info => {
-            const mapped = this.mapProgress(info);
-            if (mapped && this.progressHandler) {
-              this.progressHandler(mapped);
-            }
-          }
-        });
-
-        this.emitProgress('model', 'Descargando el modelo de IA…', 0);
-        await this.remover.load();
-      }
-
-      // Redimensionar imágenes grandes para evitar saturar la RAM del navegador.
+      this.emitProgress('preparing', 'Preparando imagen...', 10);
       const prepared = await this.prepareImage(image);
+      const imageBlob = await new Promise((resolve, reject) => {
+        prepared.toBlob(blob => blob ? resolve(blob) : reject(new Error('No se pudo convertir la imagen a Blob')), 'image/png');
+      });
+      const imageDataUrl = await this.blobToDataUrl(imageBlob);
 
-      this.emitProgress('processing', 'Recortando el fondo…', 90);
-      const png = await this.remover.remove(prepared);
+      this.emitProgress('processing', 'Recortando el fondo...', 90);
+      const png = await this.sendWorkerRequest('remove', { imageDataUrl });
+      this.modelLoaded = true;
       this.emitProgress('done', 'Fondo eliminado', 100);
       return png;
     } finally {
       this.progressHandler = null;
     }
+  }
+
+  blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('No se pudo preparar la imagen para el worker.'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  getWorker() {
+    if (this.worker) return this.worker;
+
+    const worker = new Worker('js/workers/background-removal.worker.js', { type: 'module' });
+    worker.addEventListener('message', event => {
+      const { type, requestId, info, png, message } = event.data || {};
+      if (type === 'progress') {
+        if (this.progressHandler) this.handleModelProgress(info);
+        return;
+      }
+
+      const request = this.workerRequests.get(requestId);
+      if (!request) return;
+      this.workerRequests.delete(requestId);
+      if (type === 'error') request.reject(new Error(message || 'Background removal worker error.'));
+      else if (type === 'loaded') {
+        this.modelLoaded = true;
+        request.resolve(true);
+      } else if (type === 'result') request.resolve(png);
+    });
+    worker.addEventListener('error', event => {
+      const error = new Error(event.message || 'Background removal worker failed.');
+      for (const request of this.workerRequests.values()) request.reject(error);
+      this.workerRequests.clear();
+      this.worker = null;
+      this.modelLoaded = false;
+    });
+
+    this.worker = worker;
+    return worker;
+  }
+
+  sendWorkerRequest(type, payload = {}) {
+    const worker = this.getWorker();
+    const requestId = this.nextWorkerRequestId++;
+
+    return new Promise((resolve, reject) => {
+      this.workerRequests.set(requestId, { resolve, reject });
+      worker.postMessage({
+        type,
+        requestId,
+        moduleUrl: this.moduleUrl,
+        ...payload
+      });
+    });
   }
 
   /**
@@ -102,15 +166,13 @@ window.CanvasApp.BackgroundRemovalService = class BackgroundRemovalService {
     const maxDim = BackgroundRemovalService.MAX_DIMENSION;
 
     const img = await this.toImageElement(image);
-    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
-
-    if (scale >= 1) {
-      return img;
-    }
+    const width = img.naturalWidth || img.width;
+    const height = img.naturalHeight || img.height;
+    const scale = Math.min(1, maxDim / Math.max(width, height));
 
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(img.naturalWidth || img.width) * scale;
-    canvas.height = Math.round(img.naturalHeight || img.height) * scale;
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     return canvas;
@@ -122,39 +184,54 @@ window.CanvasApp.BackgroundRemovalService = class BackgroundRemovalService {
    * @returns {Promise<HTMLImageElement>}
    */
   toImageElement(image) {
-    if (image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0) {
-      return Promise.resolve(image);
-    }
     if (image instanceof HTMLCanvasElement) {
       return Promise.resolve(image);
     }
 
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('No se pudo leer la imagen de origen.'));
+    if (image instanceof ImageData) {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      canvas.getContext('2d').putImageData(image, 0, 0);
+      return Promise.resolve(canvas);
+    }
 
-      if (typeof image === 'string') {
+    if (image instanceof HTMLImageElement) {
+      if (image.complete && image.naturalWidth > 0) {
+        return Promise.resolve(image);
+      }
+      // Fall through to load it from its src.
+      image = image.src;
+    }
+
+    if (typeof image === 'string') {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('No se pudo leer la imagen de origen.'));
         img.src = image;
-      } else if (image instanceof Blob || image instanceof File) {
+      });
+    }
+
+    if (image instanceof Blob || image instanceof File) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
         const objectUrl = URL.createObjectURL(image);
         img.onload = () => {
-          // Revocar la URL después de decodificar; el bitmap queda en memoria.
           URL.revokeObjectURL(objectUrl);
           resolve(img);
         };
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error('No se pudo leer la imagen de origen.'));
+        };
+        img.crossOrigin = 'anonymous';
         img.src = objectUrl;
-      } else if (image instanceof ImageData) {
-        const canvas = document.createElement('canvas');
-        canvas.width = image.width;
-        canvas.height = image.height;
-        canvas.getContext('2d').putImageData(image, 0, 0);
-        resolve(canvas);
-      } else {
-        reject(new Error('Formato de imagen no admitido.'));
-      }
-    });
+      });
+    }
+
+    return Promise.reject(new Error('Formato de imagen no admitido.'));
   }
 
   /* … resto sin cambios … */
@@ -168,7 +245,7 @@ window.CanvasApp.BackgroundRemovalService = class BackgroundRemovalService {
       : 0;
 
     if (info.status === 'processing') {
-      return { status: info.status, message: 'Recortando el fondo…', percent: 90 };
+      return { status: info.status, message: 'Procesando imagen… esto puede tardar unos segundos', percent: 92 };
     }
 
     if (info.status === 'done') {
@@ -195,8 +272,36 @@ window.CanvasApp.BackgroundRemovalService = class BackgroundRemovalService {
     return null;
   }
 
+  /** Coalesce repetitive model events before updating the UI. */
+  handleModelProgress(info) {
+    if (!this.progressHandler) return;
+    const mapped = this.mapProgress(info);
+    if (!mapped) return;
+
+    const key = `${mapped.status}:${mapped.percent}:${mapped.message}`;
+    const now = Date.now();
+    const hasUsefulProgress = Number.isFinite(info?.progress);
+    if (key === this.lastProgressKey && (!hasUsefulProgress || now - this.lastProgressAt < 250)) return;
+
+    this.lastProgressKey = key;
+    this.lastProgressAt = now;
+    this.pendingProgress = mapped;
+    if (this.progressFrame !== null) return;
+
+    const flush = () => {
+      this.progressFrame = null;
+      const progress = this.pendingProgress;
+      this.pendingProgress = null;
+      if (progress && this.progressHandler) this.progressHandler(progress);
+    };
+    this.progressFrame = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame(flush)
+      : setTimeout(flush, 0);
+  }
+
   emitProgress(status, message, percent) {
     if (this.progressHandler) {
+      this.lastProgressKey = null;
       this.progressHandler({ status, message, percent });
     }
   }
@@ -215,30 +320,45 @@ window.CanvasApp.BackgroundRemovalService = class BackgroundRemovalService {
     if (error && error.userMessage) return error;
 
     const message = error instanceof Error ? error.message : String(error);
+    console.error('[BackgroundRemoval] Error original:', message);
 
     if (/Failed to fetch|NetworkError|ERR_NETWORK|importing a module script failed|dynamically imported module|fetch dynamically imported module/i.test(message)) {
-      return this.createUserError('No se pudo cargar el modelo de IA. Revisa tu conexión a internet e inténtalo de nuevo.');
+      return this.createUserError('No se pudo cargar el modelo de IA desde internet. Verifica tu conexión y que no haya bloqueadores de anuncios activos.');
     }
 
     if (/CORS|tainted|SecurityError|cross-origin/i.test(message)) {
       return this.createUserError('La imagen remota no permite su lectura (CORS). Sube el archivo desde tu equipo o usa otra URL.');
     }
 
-    if (/memory|out of bounds|allocation/i.test(message)) {
-      return this.createUserError('No hay memoria suficiente para procesar esta imagen. Prueba con una imagen más pequeña.');
+    if (/memory|out of bounds|allocation|WebAssembly/i.test(message)) {
+      return this.createUserError('No hay memoria suficiente para procesar esta imagen. Cierra otras pestañas o usa una imagen más pequeña (máximo 1024px).');
     }
 
-    return this.createUserError('No se pudo quitar el fondo. Inténtalo de nuevo.');
+    if (/timeout|tardó demasiado/i.test(message)) {
+      return this.createUserError('La operación excedió el tiempo límite. El modelo de IA pesa 219 MB y requiere buena conexión. Intenta con una imagen más pequeña.');
+    }
+
+    if (/WebGPU|shader|device lost|adapter/i.test(message)) {
+      return this.createUserError('La GPU no pudo ejecutar el modelo. Recarga la página para reintentar con CPU/WASM.');
+    }
+
+    return this.createUserError(`No se pudo quitar el fondo: ${message}`);
   }
 
   /**
    * Release the model and its memory.
    */
   dispose() {
-    if (this.remover && typeof this.remover.dispose === 'function') {
-      this.remover.dispose();
+    if (this.progressFrame !== null) {
+      if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.progressFrame);
+      else clearTimeout(this.progressFrame);
+      this.progressFrame = null;
     }
-    this.remover = null;
-    this.module = null;
+    this.pendingProgress = null;
+    if (this.worker) this.worker.terminate();
+    this.worker = null;
+    for (const request of this.workerRequests.values()) request.reject(new Error('Procesamiento cancelado.'));
+    this.workerRequests.clear();
+    this.modelLoaded = false;
   }
 };

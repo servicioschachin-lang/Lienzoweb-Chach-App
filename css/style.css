@@ -128,6 +128,25 @@ button {
   color: #ffffff;
 }
 
+.save-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.save-toggle input {
+  accent-color: var(--purple);
+}
+
+.save-needed {
+  border-color: var(--purple);
+  box-shadow: 0 0 0 2px var(--purple2);
+}
+
 .btn.iconbtn {
   padding: 8px;
   min-width: 36px;
@@ -175,6 +194,8 @@ button {
   overflow-y: auto;
   padding: 16px;
   z-index: 4;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .panel-head {
@@ -287,6 +308,103 @@ button {
   color: var(--purple);
 }
 
+.media-library-section {
+  margin-top: 22px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.media-library-heading {
+  margin-bottom: 10px;
+}
+
+.media-library-heading .section-title {
+  margin-bottom: 3px;
+}
+
+.media-library-heading small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.media-library-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.media-library-card {
+  position: relative;
+  min-width: 0;
+}
+
+.media-library-item {
+  width: 100%;
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  text-align: left;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.media-library-item:hover {
+  border-color: var(--purple);
+  background: #faf9ff;
+}
+
+.media-library-preview {
+  display: flex;
+  width: 100%;
+  height: 58px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--purple);
+  font-size: 23px;
+}
+
+.media-library-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-library-name {
+  display: block;
+  overflow: hidden;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-library-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(32, 34, 56, 0.72);
+  color: #fff;
+  line-height: 1;
+}
+
+.media-library-remove:hover {
+  background: var(--danger);
+}
+
+.media-library-empty {
+  margin: 6px 0 0;
+}
+
 /* --- Workspace / Canvas Area --- */
 .work {
   grid-area: work;
@@ -390,7 +508,6 @@ button {
 .element.selected {
   outline: 2px solid var(--purple);
   outline-offset: 2px;
-  z-index: 100 !important;
 }
 
 .element.selected::after {
@@ -455,6 +572,8 @@ body.preview-mode .element a {
   padding: 16px;
   overflow-y: auto;
   z-index: 4;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .props-empty {
@@ -954,36 +1073,6 @@ body.preview-mode .element a {
   flex-wrap: wrap;
 }
 
-.crop-controls label {
-  font-size: 11px;
-  color: var(--muted);
-  margin: 0;
-}
-
-.crop-controls select,
-.crop-controls input[type="number"] {
-  font-size: 12px;
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
-  color: var(--ink);
-}
-
-.crop-controls input[type="number"] {
-  width: 56px;
-}
-
-.crop-controls #cropApply {
-  padding: 4px 10px;
-  font-size: 11px;
-}
-
-.crop-controls #cropApply {
-  padding: 4px 10px;
-  font-size: 11px;
-}
-
 /* --- Toggle switch para recorte --- */
 .toggle-switch {
   display: inline-flex;
@@ -1119,4 +1208,52 @@ body.preview-mode .element a {
   .collapse-right .app {
     grid-template-columns: 48px minmax(0, 1fr);
   }
+}
+
+/* --- Caracteres individuales para texto en curva (círculo / media luna) --- */
+.element .char {
+  position: absolute;
+  display: inline-block;
+  line-height: 1;
+}
+
+/* --- Video de fondo del lienzo --- */
+.canvas-bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+/* --- Export Controls --- */
+#exportFormat,
+#exportFileName,
+#exportPageFormat {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 13px;
+  margin-right: 8px;
+}
+
+#exportFileName {
+  min-width: 170px;
+}
+
+#exportPageFormat {
+  display: none;
+}
+
+.flex-spacer {
+  flex: 1;
+}
+
+#applyBg {
+  width: 100%;
+  margin-top: 7px;
 }

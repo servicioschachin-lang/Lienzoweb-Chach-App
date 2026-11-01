@@ -101,11 +101,15 @@ window.CanvasApp.CanvasRenderer = class CanvasRenderer {
     node.style.height = `${el.h}px`;
     node.style.zIndex = el.z ?? 1;
     node.style.color = el.color ?? '#202238';
-    node.style.background = el.bg ?? 'transparent';
+    node.style.background = el.bgTransparent ? 'transparent' : (el.bg ?? 'transparent');
     node.style.borderRadius = `${el.radius ?? 0}px`;
     node.style.fontSize = `${el.fontSize ?? 14}px`;
     node.style.fontFamily = el.fontFamily || 'DM Sans';
     node.style.opacity = el.opacity ?? 1;
+    node.style.letterSpacing = `${el.letterSpacing ?? 0}px`;
+    node.style.wordSpacing = `${el.wordSpacing ?? 0}px`;
+    node.style.transformOrigin = 'center center';
+    node.style.transform = `rotate(${el.rotate ?? 0}deg)`;
   }
 
   /**
@@ -120,7 +124,7 @@ window.CanvasApp.CanvasRenderer = class CanvasRenderer {
 
     const keys = Object.keys(changes);
     // If structural or visual-style properties changed, re-render the element
-    const structuralKeys = ['type', 'shape', 'src', 'fit', 'text', 'href', 'radius', 'networks', 'crop'];
+    const structuralKeys = ['type', 'shape', 'src', 'fit', 'text', 'href', 'radius', 'networks', 'crop', 'rotate', 'writingMode', 'letterSpacing', 'wordSpacing', 'lineHeight', 'textPath', 'textPathRadius', 'textPathStart', 'textPathDirection', 'autoplay', 'loop', 'muted', 'controls'];
     const styleKeys = ['color', 'bg', 'radius', 'fontSize', 'fontFamily', 'opacity'];
     const hasStructuralChanges = keys.some(k => structuralKeys.includes(k));
     const hasStyleChanges = keys.some(k => styleKeys.includes(k));
@@ -151,8 +155,32 @@ window.CanvasApp.CanvasRenderer = class CanvasRenderer {
 
   updateCanvasBg(bg) {
     if (bg.color) this.canvas.style.backgroundColor = bg.color;
+    else this.canvas.style.backgroundColor = '';
     if (this.canvasBg) {
-      this.canvasBg.style.backgroundImage = bg.url ? `url("${bg.url.replace(/"/g, '')}")` : '';
+      // Remover video de fondo previo si existe
+      const prev = this.canvasBg.querySelector('.canvas-bg-video');
+      if (prev) prev.remove();
+      if (bg.video && bg.video.src) {
+        this.canvasBg.style.backgroundImage = '';
+        this.canvasBg.style.position = 'absolute';
+        this.canvasBg.style.inset = '0';
+        this.canvasBg.style.zIndex = '-1';
+        const video = document.createElement('video');
+        video.className = 'canvas-bg-video';
+        video.src = bg.video.src;
+        video.muted = bg.video.muted !== false;
+        video.loop = bg.video.loop !== false;
+        video.playsInline = true;
+        if (bg.video.autoplay !== false) video.autoplay = true;
+        video.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;display:block;pointer-events:none;z-index:-2;';
+        video.setAttribute('aria-hidden', 'true');
+        this.canvasBg.appendChild(video);
+        video.play().catch(() => {
+          // El autoplay puede bloquearse hasta que el usuario interactúe con la página
+        });
+      } else {
+        this.canvasBg.style.backgroundImage = bg.url ? 'url("' + bg.url.replaceAll('"', '') + '")' : '';
+      }
     }
   }
 
@@ -170,7 +198,51 @@ window.CanvasApp.CanvasRenderer = class CanvasRenderer {
 
   renderText(node, el) {
     const { escapeHtml } = window.CanvasApp.Helpers;
-    node.innerHTML = `<div class="txt" style="font-size:${el.fontSize}px;font-family:${el.fontFamily || 'DM Sans'};color:${el.color}">${escapeHtml(el.text)}</div>`;
+    const font = el.fontFamily || 'DM Sans';
+    const size = el.fontSize || 14;
+    const color = el.color ?? '#202238';
+    const text = el.text || '';
+    const writingMode = el.writingMode || 'horizontal-tb';
+    const textOrientation = el.textOrientation || 'mixed';
+    const lineHeight = el.lineHeight != null ? el.lineHeight : 1.2;
+    // Espaciado relativo (em) para que no se deforme al cambiar de vista ni al escalar el elemento
+    const letterSpacing = el.letterSpacing != null ? el.letterSpacing : 0;
+    const wordSpacing = el.wordSpacing != null ? el.wordSpacing : 0;
+    const lsEm = size > 0 ? letterSpacing / size : 0;
+    const wsEm = size > 0 ? wordSpacing / size : 0;
+
+    const baseStyles = `font-size:${size}px;font-family:${font};color:${color};writing-mode:${writingMode};text-orientation:${textOrientation};line-height:${lineHeight};letter-spacing:${lsEm}em;word-spacing:${wsEm}em`;
+
+    // Texto en curva (círculo completo o media luna)
+    if (el.textPath && el.textPath !== 'none' && text) {
+      const cx = el.w / 2;
+      const cy = el.h / 2;
+      // Radio relativo al tamaño del elemento: si es <=1 se interpreta como fracción del menor lado,
+      // así no se deforma al cambiar entre desktop/tablet/móvil.
+      const baseRadius = Math.min(el.w, el.h) * 0.45;
+      const radius = el.textPathRadius != null
+        ? (el.textPathRadius <= 1 ? el.textPathRadius * baseRadius : el.textPathRadius)
+        : baseRadius;
+      const total = Math.max(text.length, 1);
+      const sweep = el.textPath === 'half-moon' ? Math.PI : 2 * Math.PI;
+      const direction = el.textPathDirection === 'ccw' ? -1 : 1;
+      const start = ((el.textPathStart || 0) * Math.PI) / 180;
+
+      const chars = text.split('').map((ch, i) => {
+        const t = i / Math.max(total - 1, 1);
+        const angle = start + direction * sweep * t;
+        const x = cx + Math.cos(angle) * radius;
+        const y = cy + Math.sin(angle) * radius;
+        const rot = (angle * 180) / Math.PI + (direction === 1 ? 90 : -90);
+        return `<span class="char" style="left:${x}px;top:${y}px;transform:translate(-50%,-50%) rotate(${rot}deg);white-space:pre">${escapeHtml(ch)}</span>`;
+      }).join('');
+
+      node.innerHTML = `<div class="txt path-wrap" style="${baseStyles};position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center">${chars}</div>`;
+      return;
+    }
+
+    // Texto normal (horizontal o vertical por writing-mode)
+    node.innerHTML = `<div class="txt" style="${baseStyles};text-align:center;display:inline-block">${escapeHtml(text)}</div>`;
   }
 
   renderButton(node, el) {
@@ -255,7 +327,13 @@ window.CanvasApp.CanvasRenderer = class CanvasRenderer {
   renderVideo(node, el) {
     const { escapeHtml } = window.CanvasApp.Helpers;
     if (el.src) {
-      node.innerHTML = `<video class="media" src="${escapeHtml(el.src)}" controls style="border-radius:${el.radius}px"></video>`;
+      // Los navegadores bloquean autoplay con sonido: si se pide autoplay se fuerza muted + playsinline
+      const auto = el.autoplay ? 'autoplay' : '';
+      const loop = el.loop ? 'loop' : '';
+      const muted = el.autoplay || el.muted ? 'muted' : '';
+      const controls = el.controls ? 'controls' : '';
+      const inline = el.playsinline ? 'playsinline' : '';
+      node.innerHTML = `<video class="media" src="${escapeHtml(el.src)}" ${auto} ${loop} ${muted} ${controls} ${inline} style="border-radius:${el.radius}px;width:100%;height:100%;object-fit:cover;background:#000;display:block"></video>`;
     } else {
       node.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;background:#eee;border-radius:${el.radius}px;font-size:12px;color:#777">▷ Añadir video</div>`;
     }

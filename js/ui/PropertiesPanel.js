@@ -13,13 +13,14 @@ window.CanvasApp.PropertiesPanel = class PropertiesPanel {
    * @param {EventBus} options.eventBus
    * @param {NotificationService} options.notificationService
    */
-  constructor({ container, stateManager, eventBus, notificationService, backgroundRemoval, speechToText }) {
+  constructor({ container, stateManager, eventBus, notificationService, backgroundRemoval, speechToText, mediaLibrary }) {
     this.container = container;
     this.state = stateManager;
     this.eventBus = eventBus;
     this.notifications = notificationService;
     this.backgroundRemoval = backgroundRemoval;
     this.speechToText = speechToText;
+    this.mediaLibrary = mediaLibrary;
     this.removingId = null;
 
     // Dictation state
@@ -340,6 +341,97 @@ window.CanvasApp.PropertiesPanel = class PropertiesPanel {
       `;
     }
 
+    // --- Fondo transparente (imagen) ---
+    if (el.type === 'image') {
+      const isTransparent = el.bgRemoved || el.bg === 'transparent' || el.bgTransparent;
+      html += `
+        <div class="prop-group">
+          <div class="prop-title">Fondo de imagen</div>
+          <div class="field">
+            <label>Fondo transparente</label>
+            <div class="toggle-switch">
+              <input type="checkbox" id="propTransparentBg" ${isTransparent ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </div>
+            <p class="field-hint">Cuando está activo no se asigna color de fondo detrás de la imagen (ideal para PNG con transparencia). Se detecta automáticamente al subir.</p>
+          </div>
+        </div>`;
+    }
+
+    // --- Efectos de texto (rotación, escritura vertical, espaciado, curva) ---
+    if (el.type === 'text') {
+      html += `
+        <div class="prop-group">
+          <div class="prop-title">Efectos de texto</div>
+          ${this.createInputField('Rotación (grados)', 'rotate', el.rotate, 'number', 'step="1" min="-360" max="360"')}
+          <div class="field">
+            <label>Modo de escritura</label>
+            <select data-prop="writingMode">
+              <option value="horizontal-tb" ${el.writingMode === 'horizontal-tb' ? 'selected' : ''}>Horizontal</option>
+              <option value="vertical-rl" ${el.writingMode === 'vertical-rl' ? 'selected' : ''}>Vertical (arriba → abajo)</option>
+              <option value="vertical-lr" ${el.writingMode === 'vertical-lr' ? 'selected' : ''}>Vertical (izquierda → derecha)</option>
+            </select>
+          </div>
+          ${this.createInputField('Espacio entre letras (px)', 'letterSpacing', el.letterSpacing, 'number', 'step="0.5" min="-10" max="50"')}
+          ${this.createInputField('Espacio entre palabras (px)', 'wordSpacing', el.wordSpacing, 'number', 'step="0.5" min="-10" max="50"')}
+          ${this.createInputField('Interlineado', 'lineHeight', el.lineHeight, 'number', 'step="0.1" min="0.5" max="3"')}
+          <div class="field">
+            <label>Texto en curva</label>
+            <select data-prop="textPath">
+              <option value="none" ${el.textPath === 'none' ? 'selected' : ''}>Ninguno</option>
+              <option value="arc" ${el.textPath === 'arc' ? 'selected' : ''}>Círculo completo</option>
+              <option value="half-moon" ${el.textPath === 'half-moon' ? 'selected' : ''}>Media luna</option>
+            </select>
+          </div>
+          ${this.createInputField('Radio del arco (px)', 'textPathRadius', el.textPathRadius, 'number', 'step="10" min="40" max="600"')}
+          ${this.createInputField('Ángulo inicial (°)', 'textPathStart', el.textPathStart, 'number', 'step="5" min="0" max="359')}
+          <div class="field">
+            <label>Sentido</label>
+            <select data-prop="textPathDirection">
+              <option value="cw" ${el.textPathDirection === 'cw' ? 'selected' : ''}>Horario</option>
+              <option value="ccw" ${el.textPathDirection === 'ccw' ? 'selected' : ''}>Antihorario</option>
+            </select>
+          </div>
+        </div>`;
+    }
+
+    // --- Reproducción de video ---
+    if (el.type === 'video') {
+      html += `
+        <div class="prop-group">
+          <div class="prop-title">Reproducción de video</div>
+          <div class="field">
+            <label>Autoplay (reproducir al cargar)</label>
+            <div class="toggle-switch">
+              <input type="checkbox" id="propVideoAutoplay" ${el.autoplay ? 'checked' : ''} data-prop="autoplay">
+              <span class="toggle-slider"></span>
+            </div>
+            <p class="field-hint">Si se activa, se fuerza audio silenciado y reproducción automática (política de los navegadores).</p>
+          </div>
+          <div class="field">
+            <label>Bucle (loop)</label>
+            <div class="toggle-switch">
+              <input type="checkbox" id="propVideoLoop" ${el.loop ? 'checked' : ''} data-prop="loop">
+              <span class="toggle-slider"></span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Silenciado</label>
+            <div class="toggle-switch">
+              <input type="checkbox" id="propVideoMuted" ${el.muted !== false ? 'checked' : ''} data-prop="muted">
+              <span class="toggle-slider"></span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Mostrar controles</label>
+            <div class="toggle-switch">
+              <input type="checkbox" id="propVideoControls" ${el.controls !== false ? 'checked' : ''} data-prop="controls">
+              <span class="toggle-slider"></span>
+            </div>
+          </div>
+        </div>`;
+    }
+
     this.container.innerHTML = html;
     this.attachFormListeners(el);
     this.bindDictationEvents(el);
@@ -380,17 +472,48 @@ window.CanvasApp.PropertiesPanel = class PropertiesPanel {
     if (removeBgBtn) removeBgBtn.onclick = () => this.removeBackground(el);
     if (restoreBgBtn) restoreBgBtn.onclick = () => this.restoreOriginal(el);
 
+    // Fondo transparente de imagen (toggle dedicado)
+    const transparentBg = this.container.querySelector('#propTransparentBg');
+    if (transparentBg) {
+      transparentBg.onchange = () => {
+        const checked = transparentBg.checked;
+        const current = this.state.getElementById(el.id);
+        const restoreBg = current && current.bg && current.bg !== 'transparent' ? current.bg : '#ffffff';
+        this.state.updateElement(el.id, {
+          bg: checked ? 'transparent' : restoreBg,
+          bgRemoved: checked,
+          bgTransparent: checked
+        }, true);
+      };
+    }
+
     if (fileInput) {
-      fileInput.onchange = () => {
+      fileInput.onchange = async () => {
         const file = fileInput.files[0];
         if (!file) return;
         const url = URL.createObjectURL(file);
-        this.state.updateElement(el.id, {
+        const updates = {
           src: url,
+          name: file.name,
           bgRemoved: false,
           originalSrc: null,
           originalBg: null
-        }, true);
+        };
+        this.state.updateElement(el.id, updates, true);
+        // Detectar transparencia automática en imágenes
+        if (el.type === 'image') {
+          window.CanvasApp.Helpers.detectImageTransparency(url).then(transparent => {
+            if (transparent) {
+              this.state.updateElement(el.id, { bg: 'transparent', bgRemoved: true, bgTransparent: true }, true);
+              this.notifications.showToast('Fondo transparente detectado en la imagen');
+            }
+          });
+        }
+        try {
+          await this.mediaLibrary?.add(file, { type: el.type, name: file.name });
+        } catch (error) {
+          console.error('[MediaLibrary] No se pudo guardar el archivo:', error);
+        }
         this.notifications.showToast('Archivo multimedia cargado');
       };
     }
@@ -462,10 +585,24 @@ window.CanvasApp.PropertiesPanel = class PropertiesPanel {
       const propKey = input.dataset.prop;
 
       const handleInput = (isFinal = false) => {
-        let val = input.value;
-        const numericProps = ['w', 'h', 'x', 'y', 'fontSize', 'radius', 'opacity'];
-        if (numericProps.includes(propKey)) {
-          val = Number(val);
+        let val;
+        if (input.type === 'checkbox') {
+          val = input.checked;
+        } else {
+          val = input.value;
+          const numericProps = [
+            'w', 'h', 'x', 'y', 'fontSize', 'radius', 'opacity',
+            'letterSpacing', 'wordSpacing', 'lineHeight', 'rotate',
+            'textPathRadius', 'textPathStart'
+          ];
+          if (numericProps.includes(propKey)) {
+            val = Number(val);
+          }
+          // Autoplay implica audio silenciado (política de navegadores)
+          if (propKey === 'autoplay' && val) {
+            const mutedInput = this.container.querySelector('[data-prop="muted"]');
+            if (mutedInput) mutedInput.checked = true;
+          }
         }
 
         // Apply change to state
@@ -553,7 +690,8 @@ window.CanvasApp.PropertiesPanel = class PropertiesPanel {
         this.render();
       }
     } catch (error) {
-      this.notifications.showToast(error.userMessage || 'No se pudo quitar el fondo');
+      console.error('[PropertiesPanel] Error:', error);
+      this.notifications.showToast('No se pudo quitar el fondo. Verifica tu conexión a internet.');
 
       if (button && button.isConnected) {
         button.disabled = false;

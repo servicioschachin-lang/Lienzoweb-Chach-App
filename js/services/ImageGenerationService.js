@@ -11,6 +11,10 @@ window.CanvasApp.ImageGenerationService = class ImageGenerationService {
 
     this.moduleUrl = moduleUrl || config.moduleUrl;
     this.device = device || config.device;
+    this.size = config.size || 'small';
+    this.width = config.width || 384;
+    this.height = config.height || 384;
+    this.steps = config.steps || 3;
     this.module = null;
     this.generator = null;
     this.queue = Promise.resolve();
@@ -31,6 +35,46 @@ window.CanvasApp.ImageGenerationService = class ImageGenerationService {
     return task;
   }
 
+  async load(onProgress) {
+    const emit = (status, message, percent) => {
+      if (typeof onProgress === 'function') {
+        onProgress({ status, message, percent });
+      }
+    };
+
+    if (!this.module) {
+      this.module = await import(/* webpackIgnore: true */ this.moduleUrl);
+    }
+
+    if (!this.module || typeof this.module.ImageGenerator !== 'function') {
+      const err = this.createUserError(
+        'El módulo de generación de imágenes no se cargó correctamente o no exporta ImageGenerator. Verifica tu conexión a internet e intenta de nuevo.'
+      );
+      throw err;
+    }
+
+    if (!this.generator) {
+      const options = {
+        size: this.size,
+        width: this.width,
+        height: this.height,
+        steps: this.steps,
+        onProgress: info => this.mapProgress(info, emit)
+      };
+      if (this.device && this.device !== 'auto') options.device = this.device;
+      try {
+        this.generator = new this.module.ImageGenerator(options);
+      } catch (constructError) {
+        const err = this.createUserError(
+          'No se pudo iniciar el generador de imágenes. El módulo podría requerir una clave de API o no estar disponible en tu región.'
+        );
+        err.originalError = constructError;
+        throw err;
+      }
+      await this.generator.load();
+    }
+  }
+
   async runGeneration(prompt, onProgress) {
     const emit = (status, message, percent) => {
       if (typeof onProgress === 'function') {
@@ -38,23 +82,64 @@ window.CanvasApp.ImageGenerationService = class ImageGenerationService {
       }
     };
 
+    // Timeout de 600 segundos (10 minutos) para descargar 3.5 GB del modelo
+    const timeout = 600000;
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('La descarga del modelo de IA tardó demasiado. Verifica tu conexión a internet (el modelo pesa ~3.5 GB).')), timeout);
+    });
+
     emit('engine', 'Cargando el generador de imágenes…', 0);
 
     if (!this.module) {
-      this.module = await import(/* webpackIgnore: true */ this.moduleUrl);
+      this.module = await Promise.race([
+        import(/* webpackIgnore: true */ this.moduleUrl),
+        timeoutPromise
+      ]);
     }
 
     if (!this.generator) {
-      emit('model', 'Descargando el modelo de IA…', 5);
-      const options = { onProgress: info => this.mapProgress(info, emit) };
-      if (this.device) options.device = this.device;
+      emit('model', 'Descargando el modelo de IA (~3.5 GB)…', 5);
 
-      this.generator = new this.module.ImageGenerator(options);
-      await this.generator.load();
+      if (!this.module || typeof this.module.ImageGenerator !== 'function') {
+        const err = this.createUserError(
+          'El módulo de generación de imágenes no se cargó correctamente. Verifica tu conexión a internet e intenta de nuevo.'
+        );
+        throw err;
+      }
+
+      const options = {
+        size: this.size,
+        width: this.width,
+        height: this.height,
+        steps: this.steps,
+        onProgress: info => this.mapProgress(info, emit)
+      };
+      if (this.device && this.device !== 'auto') options.device = this.device;
+
+      try {
+        this.generator = new this.module.ImageGenerator(options);
+      } catch (constructError) {
+        const err = this.createUserError(
+          'No se pudo iniciar el generador de imágenes. El módulo podría requerir una clave de API o no estar disponible en tu región.'
+        );
+        err.originalError = constructError;
+        throw err;
+      }
+      await Promise.race([
+        this.generator.load(),
+        timeoutPromise
+      ]);
     }
 
     emit('processing', 'Creando la imagen…', 90);
-    const result = await this.generator.generate(prompt);
+    const result = await Promise.race([
+      this.generator.generate(prompt, {
+        width: this.width,
+        height: this.height,
+        steps: this.steps
+      }),
+      timeoutPromise
+    ]);
     const image = await (result && result.image);
 
     if (!(image instanceof Blob)) {
